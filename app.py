@@ -39,7 +39,6 @@ def kampanya_ekle(isim):
 def kampanya_sil(isim):
     conn = sqlite3.connect('pr_yonetim.db')
     c = conn.cursor()
-    # Hem kampanya adını hem de o kampanyaya ait tüm kayıtları siler
     c.execute("DELETE FROM kampanyalar WHERE kampanya_adi = ?", (isim,))
     c.execute("DELETE FROM pr_kayitlar WHERE kampanya_adi = ?", (isim,))
     conn.commit()
@@ -71,8 +70,8 @@ girilen_sifre = st.sidebar.text_input("Patron şifresini girin:", type="password
 is_patron = (girilen_sifre == PATRON_SIFRESI)
 
 if is_patron:
-    tab_link_ekle, tab_patron_paneli, tab_kampanya_yonetimi = st.tabs([
-        "📥 Lyrics Sayfa Girişi", "📊 Patron Rapor Odası (GİZLİ)", "⚙️ Kampanya Yönetimi (GİZLİ)"
+    tab_link_ekle, tab_kampanya_yonetimi, tab_patron_paneli = st.tabs([
+        "📥 Lyrics Sayfa Girişi", "⚙️ Kampanya Yönetimi (GİZLİ)", "📊 Patron Rapor Odası (GİZLİ)"
     ])
 else:
     tab_link_ekle = st.tabs(["📥 Lyrics Sayfa Girişi"])[0]
@@ -100,7 +99,7 @@ with tab_link_ekle:
                 else:
                     st.error("⚠️ Lütfen tüm alanları eksiksiz doldurun ve ücreti girin!")
 
-# --- GİZLİ ALANLAR ---
+# --- GIZLI ALANLAR ---
 if is_patron:
     # --- SEKME 2: PATRON RAPOR ODASI ---
     with tab_patron_paneli:
@@ -134,7 +133,7 @@ if is_patron:
                 st.info("Bu kampanya için henüz hiçbir sayfa link yüklemedi.")
 
     # --- SEKME 3: KAMPANYA YÖNETİMİ (EKLEME & SİLME) ---
-    with tab_campaign_yonetimi:
+    with tab_kampanya_yonetimi:
         col_ekle, col_sil = st.columns(2)
         
         with col_ekle:
