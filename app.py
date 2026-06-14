@@ -7,7 +7,6 @@ import datetime
 st.set_page_config(page_title="PR Kampanya & Borç Otomasyonu", layout="wide")
 
 # --- PATRON GİRİŞ ŞİFRESİ ---
-# Buradaki '1907' yerine kendi istediğin harf veya sayılardan oluşan gizli şifreni yazabilirsin kral!
 PATRON_SIFRESI = "1907"
 
 # --- VERİTABANI ALTYAPISI ---
@@ -37,6 +36,15 @@ def kampanya_ekle(isim):
         pass
     conn.close()
 
+def kampanya_sil(isim):
+    conn = sqlite3.connect('pr_yonetim.db')
+    c = conn.cursor()
+    # Hem kampanya adını hem de o kampanyaya ait tüm kayıtları siler
+    c.execute("DELETE FROM kampanyalar WHERE kampanya_adi = ?", (isim,))
+    c.execute("DELETE FROM pr_kayitlar WHERE kampanya_adi = ?", (isim,))
+    conn.commit()
+    conn.close()
+
 def kampanyalari_getir():
     conn = sqlite3.connect('pr_yonetim.db')
     c = conn.cursor()
@@ -57,20 +65,16 @@ def link_kaydet(campaign, sayfa, link, ucret):
 # --- ARAYÜZ ---
 st.title("🎵 PR Kampanya & TikTok Lyrics Takip Merkezi")
 
-# Sol Panel / Üst Alan: Gizli Patron Girişi
 st.sidebar.markdown("### 🔒 Yönetim Girişi")
 girilen_sifre = st.sidebar.text_input("Patron şifresini girin:", type="password", placeholder="Şifre...")
 
-# Şifre doğru mu kontrolü
 is_patron = (girilen_sifre == PATRON_SIFRESI)
 
-# Sekmeleri Şifre Durumuna Göre Dinamik Oluştur
 if is_patron:
     tab_link_ekle, tab_patron_paneli, tab_kampanya_yonetimi = st.tabs([
-        "📥 Lyrics Sayfa Girişi", "📊 Patron Rapor Odası (GİZLİ)", "⚙️ Kampanya Oluştur (GİZLİ)"
+        "📥 Lyrics Sayfa Girişi", "📊 Patron Rapor Odası (GİZLİ)", "⚙️ Kampanya Yönetimi (GİZLİ)"
     ])
 else:
-    # Şifre girilmediyse sayfalar SADECE bu tek sekmeyi görebilir!
     tab_link_ekle = st.tabs(["📥 Lyrics Sayfa Girişi"])[0]
 
 # --- SEKME 1: SAYFALARIN GÖRECEĞİ ALAN (HERKESE AÇIK) ---
@@ -96,7 +100,7 @@ with tab_link_ekle:
                 else:
                     st.error("⚠️ Lütfen tüm alanları eksiksiz doldurun ve ücreti girin!")
 
-# --- ŞİFRELİ ALANLAR: SADECE SEN GÖREBİLİRSİN ---
+# --- GİZLİ ALANLAR ---
 if is_patron:
     # --- SEKME 2: PATRON RAPOR ODASI ---
     with tab_patron_paneli:
@@ -104,7 +108,7 @@ if is_patron:
         mevcut_kampanyalar_rapor = kampanyalari_getir()
         
         if not mevcut_kampanyalar_rapor:
-            st.info("Gösterilecek veri yok.")
+            st.info("Gösterilecek aktif bir kampanya yok.")
         else:
             izlenecek_kampanya = st.selectbox("Raporunu görmek istediğiniz kampanyayı seçin:", mevcut_kampanyalar_rapor, key="rapor_sec")
             
@@ -129,15 +133,32 @@ if is_patron:
             else:
                 st.info("Bu kampanya için henüz hiçbir sayfa link yüklemedi.")
 
-    # --- SEKME 3: KAMPANYA YÖNETİMİ ---
-    with tab_kampanya_yonetimi:
-        st.subheader("⚙️ Yeni PR Kampanyası Başlat")
-        yeni_sarki = st.text_input("Şarkıcı ve Kampanya Adı (Örn: RECO - Hatıran Var):")
+    # --- SEKME 3: KAMPANYA YÖNETİMİ (EKLEME & SİLME) ---
+    with tab_campaign_yonetimi:
+        col_ekle, col_sil = st.columns(2)
         
-        if st.button("➕ Kampanyayı Sisteme Tanımla"):
-            if yeni_sarki:
-                kampanya_ekle(yeni_sarki)
-                st.success(f"🔥 '{yeni_sarki}' kampanyası başarıyla başlatıldı!")
-                st.rerun()
+        with col_ekle:
+            st.subheader("➕ Yeni Kampanya Başlat")
+            yeni_sarki = st.text_input("Şarkıcı ve Kampanya Adı (Örn: RECO - Hatıran Var):")
+            if st.button("🚀 Kampanyayı Aç"):
+                if yeni_sarki:
+                    kampanya_ekle(yeni_sarki)
+                    st.success(f"🔥 '{yeni_sarki}' başarıyla açıldı!")
+                    st.rerun()
+                else:
+                    st.error("Boş bırakılamaz!")
+                    
+        with col_sil:
+            st.subheader("🗑️ Biten Kampanyayı Sil")
+            silinecek_kampanyalar = kampanyalari_getir()
+            
+            if not silinecek_kampanyalar:
+                st.info("Silinecek kampanya yok.")
             else:
-                st.error("Lütfen boş bırakmayın!")
+                silinecek_secim = st.selectbox("Silmek istediğiniz kampanyayı seçin:", silinecek_kampanyalar, key="sil_sec")
+                st.warning("⚠️ DİKKAT: Kampanyayı sildiğinizde bu şarkıya ait gelen tüm linkler ve borç kayıtları kalıcı olarak yok edilir!")
+                
+                if st.button("❌ Kampanyayı ve Tüm Kayıtları Sil"):
+                    kampanya_sil(silinecek_secim)
+                    st.success(f"🗑️ '{silinecek_secim}' ve tüm verileri başarıyla silindi!")
+                    st.rerun()
