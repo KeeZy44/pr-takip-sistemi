@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 import datetime
+import time
 
 # Sayfa Ayarları
 st.set_page_config(page_title="PR Kampanya & Borç Otomasyonu", layout="wide")
@@ -52,12 +53,21 @@ def kampanyalari_getir():
     conn.close()
     return liste
 
+# --- KONTROL MOTORU: DAHA ÖNCE GÖNDERDİ Mİ? ---
+def daha_once_gonderdi_mi(campaign, sayfa):
+    conn = sqlite3.connect('pr_yonetim.db')
+    c = conn.cursor()
+    c.execute("SELECT id FROM pr_kayitlar WHERE kampanya_adi = ? AND LOWER(TRIM(sayfa_adi)) = LOWER(TRIM(?))", (campaign, sayfa))
+    result = c.fetchone()
+    conn.close()
+    return result is not None
+
 def link_kaydet(campaign, sayfa, link, ucret):
     conn = sqlite3.connect('pr_yonetim.db')
     c = conn.cursor()
     tarih = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     c.execute("INSERT INTO pr_kayitlar (tarih, kampanya_adi, sayfa_adi, video_linki, ucret) VALUES (?, ?, ?, ?, ?)",
-              (tarih, campaign, sayfa, link, ucret))
+              (tarih, campaign, sayfa.strip(), link.strip(), ucret))
     conn.commit()
     conn.close()
 
@@ -99,7 +109,7 @@ with tab_link_ekle:
     if not mevcut_kampanyalar:
         st.warning("Henüz aktif bir PR kampanyası bulunmuyor.")
     else:
-        with st.form("sayfa_giriş_formu", clear_on_submit=True):
+        with st.form("sayfa_giriş_formu", clear_on_submit=False):
             secilen_kampanya = st.selectbox("🎯 Reklamını Yaptığınız Şarkıyı Seçin:", mevcut_kampanyalar)
             sayfa_adi = st.text_input("TikTok Sayfa Adınız:", placeholder="@lyrics_sayfam")
             video_linki = st.text_input("Paylaşılan Video Linki:", placeholder="https://vm.tiktok.com/...")
@@ -109,11 +119,18 @@ with tab_link_ekle:
             
             if submit_butonu:
                 if sayfa_adi and video_linki and calisilan_ucret > 0:
-                    link_kaydet(secilen_kampanya, sayfa_adi, video_linki, calisilan_ucret)
-                    st.success("✅ Harika! Veriler başarıyla iletildi. Emeğinize sağlık!")
-                    st.rerun()
+                    # Çift Gönderim Kontrolü
+                    if daha_once_gonderdi_mi(secilen_kampanya, sayfa_adi):
+                        st.error(f"❌ ÖNEMLİ UYARI: {sayfa_adi} isimli sayfa, '{secilen_kampanya}' kampanyası için daha önce zaten link gönderdi! Mükerrer kayıt engellendi.")
+                    else:
+                        link_kaydet(secilen_kampanya, sayfa_adi, video_linki, calisilan_ucret)
+                        # Başarı ekranını sabitlemek için küçük bir mekatronik zaman gecikmesi yapıyoruz
+                        st.success("🎉 BAŞARILI! Bilgileriniz sisteme kaydedildi ve Mehmet Ali'ye iletildi. Emeğinize sağlık!")
+                        st.balloons()
+                        time.sleep(3) # Adam yazıyı 3 saniye boyunca kesin görsün
+                        st.rerun() # Sonra formu temizlemek için yenile
                 else:
-                    st.error("⚠️ Lütfen tüm alanları eksiksiz doldurun!")
+                    st.error("⚠️ Lütfen tüm alanları (Sayfa Adı, Link, Ücret) eksiksiz doldurun!")
 
 # --- GIZLI ALANLAR ---
 if is_patron:
