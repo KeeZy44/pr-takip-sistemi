@@ -53,14 +53,13 @@ def kampanyalari_getir():
     conn.close()
     return liste
 
-# --- KONTROL MOTORU: DAHA ÖNCE GÖNDERDİ Mİ? ---
 def daha_once_gonderdi_mi(campaign, sayfa):
     conn = sqlite3.connect('pr_yonetim.db')
     c = conn.cursor()
-    c.execute("SELECT id FROM pr_kayitlar WHERE kampanya_adi = ? AND LOWER(TRIM(sayfa_adi)) = LOWER(TRIM(?))", (campaign, sayfa))
+    c.execute("SELECT video_linki FROM pr_kayitlar WHERE kampanya_adi = ? AND LOWER(TRIM(sayfa_adi)) = LOWER(TRIM(?))", (campaign, sayfa))
     result = c.fetchone()
     conn.close()
-    return result is not None
+    return result
 
 def link_kaydet(campaign, sayfa, link, ucret):
     conn = sqlite3.connect('pr_yonetim.db')
@@ -68,6 +67,14 @@ def link_kaydet(campaign, sayfa, link, ucret):
     tarih = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     c.execute("INSERT INTO pr_kayitlar (tarih, kampanya_adi, sayfa_adi, video_linki, ucret) VALUES (?, ?, ?, ?, ?)",
               (tarih, campaign, sayfa.strip(), link.strip(), ucret))
+    conn.commit()
+    conn.close()
+
+def link_guncelle_sayfa(campaign, sayfa, yeni_link):
+    conn = sqlite3.connect('pr_yonetim.db')
+    c = conn.cursor()
+    c.execute("UPDATE pr_kayitlar SET video_linki = ? WHERE kampanya_adi = ? AND LOWER(TRIM(sayfa_adi)) = LOWER(TRIM(?))", 
+              (yeni_link.strip(), campaign, sayfa.strip()))
     conn.commit()
     conn.close()
 
@@ -95,42 +102,68 @@ is_patron = (girilen_sifre == PATRON_SIFRESI)
 
 if is_patron:
     tab_link_ekle, tab_patron_paneli, tab_kampanya_yonetimi = st.tabs([
-        "📥 Lyrics Sayfa Girişi", "📊 Patron Rapor Odası (GİZLİ)", "⚙️ Kampanya Yönetimi (GİZLİ)"
+        "📥 Lyrics İşlemleri", "📊 Patron Rapor Odası (GİZLİ)", "⚙️ Kampanya Yönetimi (GİZLİ)"
     ])
 else:
-    tab_link_ekle = st.tabs(["📥 Lyrics Sayfa Girişi"])[0]
+    tab_link_ekle = st.tabs(["📥 Lyrics İşlemleri"])[0]
 
 # --- SEKME 1: SAYFALARIN GÖRECEĞİ ALAN (HERKESE AÇIK) ---
 with tab_link_ekle:
-    st.error("🚨 DİKKAT: Lütfen formu doldurmadan önce en üstteki kutudan DOĞRU SANATÇI / ŞARKIYI seçtiğinizden emin olun!")
-    st.subheader("🔗 Video Linki ve Ücret Bildirim Formu")
+    st.error("🚨 DİKKAT: Lütfen formu doldurmadan önce doğru sanatçı/şarkıyı seçtiğinizden emin olun!")
     mevcut_kampanyalar = kampanyalari_getir()
     
     if not mevcut_kampanyalar:
         st.warning("Henüz aktif bir PR kampanyası bulunmuyor.")
     else:
-        with st.form("sayfa_giriş_formu", clear_on_submit=False):
-            secilen_kampanya = st.selectbox("🎯 Reklamını Yaptığınız Şarkıyı Seçin:", mevcut_kampanyalar)
-            sayfa_adi = st.text_input("TikTok Sayfa Adınız:", placeholder="@lyrics_sayfam")
-            video_linki = st.text_input("Paylaşılan Video Linki:", placeholder="https://vm.tiktok.com/...")
-            calisilan_ucret = st.number_input("Anlaşılan Ücret (TL):", min_value=0.0, step=50.0, value=0.0)
-            
-            submit_butonu = st.form_submit_button("🚀 Bilgileri Gönder ve Kaydet")
-            
-            if submit_butonu:
-                if sayfa_adi and video_linki and calisilan_ucret > 0:
-                    # Çift Gönderim Kontrolü
-                    if daha_once_gonderdi_mi(secilen_kampanya, sayfa_adi):
-                        st.error(f"❌ ÖNEMLİ UYARI: {sayfa_adi} isimli sayfa, '{secilen_kampanya}' kampanyası için daha önce zaten link gönderdi! Mükerrer kayıt engellendi.")
+        col_form, col_guncelle = st.columns(2)
+        
+        with col_form:
+            st.subheader("🔗 Yeni Video Bildirim Formu")
+            with st.form("sayfa_giriş_formu", clear_on_submit=False):
+                secilen_kampanya = st.selectbox("🎯 Reklamını Yaptığınız Şarkıyı Seçin:", mevcut_kampanyalar, key="yeni_kamp_sec")
+                sayfa_adi = st.text_input("TikTok Sayfa Adınız:", placeholder="@lyrics_sayfam", key="yeni_sayfa_ad")
+                video_linki = st.text_input("Paylaşılan Video Linki:", placeholder="https://vm.tiktok.com/...", key="yeni_link_ad")
+                calisilan_ucret = st.number_input("Anlaşılan Ücret (TL):", min_value=0.0, step=50.0, value=0.0)
+                
+                submit_butonu = st.form_submit_button("🚀 Bilgileri Gönder ve Kaydet")
+                
+                if submit_butonu:
+                    if sayfa_adi and video_linki and calisilan_ucret > 0:
+                        eski_kayit = daha_once_gonderdi_mi(secilen_kampanya, sayfa_adi)
+                        if eski_kayit:
+                            st.error(f"❌ UYARI: {sayfa_adi} sayfası bu şarkı için zaten link gönderdi! Yanlış link attıysanız sağ taraftaki 'Link Değiştirme' alanını kullanın.")
+                        else:
+                            link_kaydet(secilen_kampanya, sayfa_adi, video_linki, calisilan_ucret)
+                            st.success("🎉 BAŞARILI! Bilgileriniz sisteme kaydedildi. Emeğinize sağlık!")
+                            st.balloons()
+                            time.sleep(3)
+                            st.rerun()
                     else:
-                        link_kaydet(secilen_kampanya, sayfa_adi, video_linki, calisilan_ucret)
-                        # Başarı ekranını sabitlemek için küçük bir mekatronik zaman gecikmesi yapıyoruz
-                        st.success("🎉 BAŞARILI! Bilgileriniz sisteme kaydedildi ve iletildi. Emeğinize sağlık!")
-                        st.balloons()
-                        time.sleep(3) # Adam yazıyı 3 saniye boyunca kesin görsün
-                        st.rerun() # Sonra formu temizlemek için yenile
+                        st.error("⚠️ Lütfen tüm alanları eksiksiz doldurun!")
+                        
+        with col_guncelle:
+            st.subheader("✏️ Yanlış Girilen Linki Düzenle")
+            st.info("Daha önce gönderdiğiniz hatalı bir linki buradan güncelleyebilirsiniz.")
+            
+            g_kampanya = st.selectbox("Hangi Şarkının Linkini Düzelteceksiniz?", mevcut_kampanyalar, key="g_kamp_sec")
+            g_sayfa = st.text_input("Sisteme Girdiğiniz Sayfa Adınız:", placeholder="@lyrics_sayfam", key="g_sayfa_ad")
+            
+            if g_sayfa:
+                mevcut_link_verisi = daha_once_gonderdi_mi(g_kampanya, g_sayfa)
+                if mevcut_link_verisi:
+                    st.warning(f"📋 Şu anki kayıtlı linkiniz:\n{mevcut_link_verisi[0]}")
+                    yeni_link_girdisi = st.text_input("👉 Yeni (Doğru) TikTok Linkinizi Yapıştırın:", placeholder="https://vm.tiktok.com/...", key="g_yeni_link")
+                    
+                    if st.button("💾 Linki Güncelle ve Kaydet"):
+                        if yeni_link_girdisi:
+                            link_guncelle_sayfa(g_kampanya, g_sayfa, yeni_link_girdisi)
+                            st.success("✅ Linkiniz başarıyla güncellendi! Mehmet Ali'nin paneline doğru link iletildi.")
+                            time.sleep(3)
+                            st.rerun()
+                        else:
+                            st.error("Lütfen yeni linki boş bırakmayın!")
                 else:
-                    st.error("⚠️ Lütfen tüm alanları (Sayfa Adı, Link, Ücret) eksiksiz doldurun!")
+                    st.error("🔍 Bu sayfa adına ve şarkıya ait geçmiş bir kayıt bulunamadı. Lütfen bilgileri kontrol edin.")
 
 # --- GIZLI ALANLAR ---
 if is_patron:
@@ -142,11 +175,11 @@ if is_patron:
         if not mevcut_kampanyalar_rapor:
             st.info("Gösterilecek aktif bir kampanya yok.")
         else:
-            izlenecek_kampanya = st.selectbox("Raporunu görmek istediğiniz kampanyayı seçin:", mevcut_kampanyalar_rapor, key="rapor_sec")
+            izlenecek_campaign = st.selectbox("Raporunu görmek istediğiniz kampanyayı seçin:", mevcut_kampanyalar_rapor, key="rapor_sec")
             
             conn = sqlite3.connect('pr_yonetim.db')
             query = "SELECT id, tarih as 'Tarih', sayfa_adi as 'Sayfa', video_linki as 'Video Linki', ucret as 'Ücret (TL)' FROM pr_kayitlar WHERE kampanya_adi = ?"
-            df = pd.read_sql_query(query, conn, params=(izlenecek_kampanya,))
+            df = pd.read_sql_query(query, conn, params=(izlenecek_campaign,))
             conn.close()
             
             if not df.empty:
@@ -165,7 +198,7 @@ if is_patron:
                 
                 # --- MEKATRONIK DÜZENLEME PANELİ ---
                 st.markdown("---")
-                st.subheader("🛠️ Yanlış Atılan Linki Düzeltme Paneli")
+                st.subheader("🛠️ Yanlış Atılan Linki Düzeltme Paneli (Patron)")
                 
                 df['secim_metni'] = df['Sayfa'] + " | " + df['Ücret (TL)'].astype(str) + " TL (" + df['Tarih'] + ")"
                 duzenlenecek_row = st.selectbox("Yanlış girilen kaydı listeden seçin:", df['secim_metni'].tolist())
