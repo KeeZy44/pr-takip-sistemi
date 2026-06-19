@@ -3,29 +3,30 @@ import sqlite3
 import pandas as pd
 import datetime
 import time
+import os
 
-# --- SAYFA AYARLARI & GÖRSEL TEMA (SARI & SİYAH PREMIUM CSS) ---
+# --- SAYFA AYARLARI & GÖRSEL TEMA (LOGOYLA UYUMLU SİYAH, GRİ, TURUNCU CSS) ---
 st.set_page_config(page_title="PR Kampanya & Borç Otomasyonu", layout="wide")
 
 st.markdown("""
     <style>
-    /* Tam Karanlık Arka Plan */
+    /* Tam Karanlık Kömür Siyahı Arka Plan */
     .stApp {
-        background-color: #0b0f19 !important;
+        background-color: #0d0f14 !important;
         color: #f3f4f6 !important;
     }
-    /* Form Alanı ve Kutular (Siyah Üzerine Sarı Detay) */
+    /* Form Alanı ve Kutular (Koyu Gri Üzerine Turuncu Detay) */
     div[data-testid="stForm"] {
-        background-color: #111827 !important;
-        border: 2px solid #facc15 !important;
+        background-color: #161b26 !important;
+        border: 2px solid #f97316 !important; /* Logodaki Turuncu */
         border-radius: 12px !important;
         padding: 20px !important;
-        box-shadow: 0 10px 25px rgba(250, 204, 21, 0.1);
+        box-shadow: 0 10px 25px rgba(249, 115, 22, 0.15);
     }
-    /* Canlı Sarı Butonlar */
+    /* Mat Turuncu Premium Butonlar */
     .stButton>button, div[data-testid="stDownloadButton"]>button {
-        background: linear-gradient(90deg, #eab308 0%, #facc15 100%) !important;
-        color: #000000 !important;
+        background: linear-gradient(90deg, #ea580c 0%, #f97316 100%) !important;
+        color: #ffffff !important;
         border-radius: 8px !important;
         border: none !important;
         font-weight: bold !important;
@@ -34,12 +35,22 @@ st.markdown("""
     }
     .stButton>button:hover, div[data-testid="stDownloadButton"]>button:hover {
         transform: scale(1.02);
-        box-shadow: 0 0 20px rgba(250, 204, 21, 0.4);
-        color: #000000 !important;
+        box-shadow: 0 0 20px rgba(249, 115, 22, 0.4);
+        color: #ffffff !important;
     }
-    /* Başlık Alanı (Sarı Parıltı) */
+    /* Seçim Kutuları ve Metin Alanları Odaklanma Rengi (Maviyi Tamamen Engelleme) */
+    input, select, textarea, div[role="listbox"] {
+        background-color: #1f2937 !important;
+        color: #f3f4f6 !important;
+        border: 1px solid #4b5563 !important;
+    }
+    input:focus, select:focus, textarea:focus {
+        border-color: #f97316 !important;
+        box-shadow: 0 0 0 1px #f97316 !important;
+    }
+    /* Başlık Alanı (Turuncu) */
     h1, h2, h3 {
-        color: #facc15 !important;
+        color: #f97316 !important;
         font-family: 'Segoe UI', sans-serif;
     }
     /* Giriş Alanı Etiketleri */
@@ -49,7 +60,15 @@ st.markdown("""
     }
     /* Metrik Kutuları */
     div[data-testid="stMetricValue"] {
-        color: #facc15 !important;
+        color: #f97316 !important;
+    }
+    /* Sekme Çizgileri ve Seçimleri (Maviyi Kazıma) */
+    button[data-baseweb="tab"] {
+        color: #9ca3af !important;
+    }
+    button[aria-selected="true"] {
+        color: #f97316 !important;
+        border-bottom-color: #f97316 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -70,7 +89,6 @@ def veritabanini_hazirla():
                   video_linki TEXT, 
                   ucret REAL)''')
     
-    # Dinamik Sütun Kontrolü: durum sütunu yoksa ekle
     c.execute("PRAGMA table_info(pr_kayitlar)")
     sutunlar = [row[1] for row in c.fetchall()]
     if 'durum' not in sutunlar:
@@ -153,10 +171,16 @@ def kayit_sil(kayit_id):
     conn.commit()
     conn.close()
 
-# --- ARAYÜZ BAŞLIĞI ---
-st.title("💛 PR Kampanya & TikTok Lyrics Otomasyonu 🛰️")
+# --- GÖRSEL LOGO YERLEŞTİRME MOTORU ---
+col_logo_sol, col_logo_orta, col_logo_sag = st.columns([1, 2, 1])
+with col_logo_orta:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
 
-st.sidebar.markdown("### 🔒 Yönetim")
+# --- ARAYÜZ BAŞLIĞI ---
+st.title("🍊 PR KAMPANYA & TİKTOK LYRICS OTOMASYONU")
+
+st.sidebar.markdown("### 🔒 Yönetim Girişi")
 girilen_sifre = st.sidebar.text_input("Şifre girin:", type="password", placeholder="••••")
 
 is_patron = (girilen_sifre == PATRON_SIFRESI)
@@ -260,18 +284,16 @@ if is_patron:
                 st.write("📋 **Mevcut Kampanya Dağılım Tablosu:**")
                 st.dataframe(df.drop(columns=['id']), use_container_width=True)
                 
-                # --- YENİ TEMİZ LİNK KOPYALAMA MOTORU ---
+                # --- LİNK KOPYALAMA ALANI ---
                 st.markdown(" ")
                 linkler_listesi = df['Video Linki'].tolist()
                 temiz_link_metni = "\n".join(linkler_listesi)
                 
-                # Streamlit üzerinden tek tıkla kopyalama alanını gösteriyoruz
                 st.subheader("📋 Sanatçıya Atılacak Toplu Link Listesi")
                 st.text_area("Aşağıdaki kutudan tüm linkleri tek tıkla kopyalayabilirsin kral:", value=temiz_link_metni, height=150)
                 
                 if st.button("📋 TÜM LİNKLERİ PANEYE KOPYALA"):
-                    # Arka planda javascript veya text_area aracılığıyla mobilde seç-kopyala yapmak en temiz yöntemdir
-                    st.success("✅ Tüm linkler alt alta başarıyla listelendi! Yukarıdaki kutuya basılı tutup şak diye kopyalayabilir ve sanatçıya fırlatabilirsin!")
+                    st.success("✅ Tüm linkler alt alta başarıyla listelendi! Yukarıdaki kutudan kolayca kopyalayabilirsin.")
                 
                 # --- ÖDEME KAPATMA PANELİ ---
                 st.markdown("---")
@@ -288,7 +310,7 @@ if is_patron:
                         if current_status == 'Bekliyor':
                             if st.button("🟢 Ödeme Yapıldı (Borçtan Düş)"):
                                 odeme_durumu_degistir(secili_odeme_id, 'Ödendi')
-                                st.success("Para ödendi olarak işaretlendi, kalan borçtan düşüldü!")
+                                st.success("Para ödendi olarak işaretlendi!")
                                 time.sleep(1)
                                 st.rerun()
                         else:
@@ -346,6 +368,6 @@ if is_patron:
                 silinecek_secim = st.selectbox("Silmek istediğiniz kampanyayı seçin:", silinecek_kampanyalar, key="sil_sec")
                 if st.button("❌ Kampanyayı ve Tüm Kayıtları Kalıcı Sil"):
                     kampanya_sil(silinecek_secim)
-                    st.success(f"🗑️ '{silinecek_secim}' başarıyla silindi!")
+                    st.success(f"'{silinecek_secim}' başarıyla silindi!")
                     time.sleep(1)
                     st.rerun()
