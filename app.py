@@ -110,4 +110,95 @@ with tab_link_ekle:
             if submit_butonu:
                 if sayfa_adi and video_linki and calisilan_ucret > 0:
                     link_kaydet(secilen_kampanya, sayfa_adi, video_linki, calisilan_ucret)
-                    st.success("✅ Har
+                    st.success("✅ Harika! Veriler başarıyla iletildi. Emeğinize sağlık!")
+                    st.rerun()
+                else:
+                    st.error("⚠️ Lütfen tüm alanları eksiksiz doldurun!")
+
+# --- GIZLI ALANLAR ---
+if is_patron:
+    # --- SEKME 2: PATRON RAPOR ODASI ---
+    with tab_patron_paneli:
+        st.subheader("📊 Canlı PR Raporları ve Toplam Borç Durumu")
+        mevcut_kampanyalar_rapor = kampanyalari_getir()
+        
+        if not mevcut_kampanyalar_rapor:
+            st.info("Gösterilecek aktif bir kampanya yok.")
+        else:
+            izlenecek_kampanya = st.selectbox("Raporunu görmek istediğiniz kampanyayı seçin:", mevcut_kampanyalar_rapor, key="rapor_sec")
+            
+            conn = sqlite3.connect('pr_yonetim.db')
+            query = "SELECT id, tarih as 'Tarih', sayfa_adi as 'Sayfa', video_linki as 'Video Linki', ucret as 'Ücret (TL)' FROM pr_kayitlar WHERE kampanya_adi = ?"
+            df = pd.read_sql_query(query, conn, params=(izlenecek_kampanya,))
+            conn.close()
+            
+            if not df.empty:
+                toplam_borc = df['Ücret (TL)'].sum()
+                toplam_paylasim = len(df)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric(label="🎥 Toplam Paylaşım Sayısı", value=f"{toplam_paylasim} Video")
+                with col2:
+                    st.metric(label="💰 Bu Kampanya İçin Toplam Borç", value=f"{toplam_borc:,.2f} TL")
+                
+                st.markdown("---")
+                st.write("📋 **Paylaşılan Linklerin Detaylı Listesi:**")
+                st.dataframe(df.drop(columns=['id']), use_container_width=True)
+                
+                # --- MEKATRONIK DÜZENLEME PANELİ ---
+                st.markdown("---")
+                st.subheader("🛠️ Yanlış Atılan Linki Düzeltme Paneli")
+                
+                df['secim_metni'] = df['Sayfa'] + " | " + df['Ücret (TL)'].astype(str) + " TL (" + df['Tarih'] + ")"
+                duzenlenecek_row = st.selectbox("Yanlış girilen kaydı listeden seçin:", df['secim_metni'].tolist())
+                
+                if duzenlenecek_row:
+                    secili_id = int(df[df['secim_metni'] == duzenlenecek_row]['id'].values[0])
+                    
+                    col_tasit, col_silme = st.columns(2)
+                    with col_tasit:
+                        hedef_kampanya = st.selectbox("Bu kaydı hangi DOĞRU kampanyaya taşımak istiyorsunuz?", mevcut_kampanyalar_rapor, key="hedef_kamp")
+                        if st.button("🔄 Seçilen Kaydı Bu Kampanyaya Taşı"):
+                            kayit_guncelle(secili_id, hedef_kampanya)
+                            st.success("✅ Kayıt başarıyla doğru kampanyaya taşındı!")
+                            st.rerun()
+                    with col_silme:
+                        st.write(" ")
+                        st.write(" ")
+                        if st.button("🗑️ Seçilen Kaydı Tamamen Sil"):
+                            kayit_sil(secili_id)
+                            st.success("🗑️ Kayıt sistemden tamamen silindi!")
+                            st.rerun()
+            else:
+                st.info("Bu kampanya için henüz hiçbir sayfa link yüklemedi.")
+
+    # --- SEKME 3: KAMPANYA YÖNETİMİ ---
+    with tab_kampanya_yonetimi:
+        col_ekle, col_sil = st.columns(2)
+        
+        with col_ekle:
+            st.subheader("➕ Yeni Kampanya Başlat")
+            yeni_sarki = st.text_input("Şarkıcı ve Kampanya Adı:")
+            if st.button("🚀 Kampanyayı Aç"):
+                if yeni_sarki:
+                    kampanya_ekle(yeni_sarki)
+                    st.success(f"🔥 '{yeni_sarki}' başarıyla açıldı!")
+                    st.rerun()
+                else:
+                    st.error("Boş bırakılamaz!")
+                    
+        with col_sil:
+            st.subheader("🗑️ Biten Kampanyayı Sil")
+            silinecek_kampanyalar = kampanyalari_getir()
+            
+            if not silinecek_kampanyalar:
+                st.info("Silinecek kampanya yok.")
+            else:
+                silinecek_secim = st.selectbox("Silmek istediğiniz kampanyayı seçin:", silinecek_kampanyalar, key="sil_sec")
+                st.warning("⚠️ DİKKAT: Kampanyayı sildiğinizde her şey kalıcı olarak yok edilir!")
+                
+                if st.button("❌ Kampanyayı ve Tüm Kayıtları Sil"):
+                    kampanya_sil(silinecek_secim)
+                    st.success(f"🗑️ '{silinecek_secim}' başarıyla silindi!")
+                    st.rerun()
