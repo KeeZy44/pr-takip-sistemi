@@ -125,7 +125,7 @@ with tab_link_ekle:
                     else:
                         link_kaydet(secilen_kampanya, sayfa_adi, video_linki, calisilan_ucret)
                         # Başarı ekranını sabitlemek için küçük bir mekatronik zaman gecikmesi yapıyoruz
-                        st.success("🎉 BAŞARILI! Bilgileriniz sisteme kaydedildi ve Mehmet Ali'ye iletildi. Emeğinize sağlık!")
+                        st.success("🎉 BAŞARILI! Bilgileriniz sisteme kaydedildi ve iletildi. Emeğinize sağlık!")
                         st.balloons()
                         time.sleep(3) # Adam yazıyı 3 saniye boyunca kesin görsün
                         st.rerun() # Sonra formu temizlemek için yenile
