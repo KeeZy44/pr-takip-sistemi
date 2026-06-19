@@ -4,43 +4,52 @@ import pandas as pd
 import datetime
 import time
 
-# --- SAYFA AYARLARI & GÖRSEL TEMA (CSS) ---
+# --- SAYFA AYARLARI & GÖRSEL TEMA (SARI & SİYAH PREMIUM CSS) ---
 st.set_page_config(page_title="PR Kampanya & Borç Otomasyonu", layout="wide")
 
-# Mekatronik Görsel Tasarım Tasarımı (Custom CSS)
 st.markdown("""
     <style>
-    /* Arka plan ve Genel Yazı Tipi */
+    /* Tam Karanlık Arka Plan */
     .stApp {
-        background: linear-gradient(135deg, #0f172a 0%, #1e1e38 100%);
-        color: #f8fafc;
+        background-color: #0b0f19 !important;
+        color: #f3f4f6 !important;
     }
-    /* Form ve Kutuların Kenarlıkları */
+    /* Form Alanı ve Kutular (Siyah Üzerine Sarı Detay) */
     div[data-testid="stForm"] {
-        background-color: #1e293b !important;
-        border: 2px solid #3b82f6 !important;
-        border-radius: 15px !important;
+        background-color: #111827 !important;
+        border: 2px solid #facc15 !important;
+        border-radius: 12px !important;
         padding: 20px !important;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 10px 25px rgba(250, 204, 21, 0.1);
     }
-    /* Buton Tasarımları */
-    .stButton>button {
-        background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%) !important;
-        color: white !important;
-        border-radius: 10px !important;
+    /* Canlı Sarı Butonlar */
+    .stButton>button, div[data-testid="stDownloadButton"]>button {
+        background: linear-gradient(90deg, #eab308 0%, #facc15 100%) !important;
+        color: #000000 !important;
+        border-radius: 8px !important;
         border: none !important;
         font-weight: bold !important;
+        font-size: 15px !important;
         transition: all 0.3s ease;
     }
-    .stButton>button:hover {
-        transform: scale(1.03);
-        box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+    .stButton>button:hover, div[data-testid="stDownloadButton"]>button:hover {
+        transform: scale(1.02);
+        box-shadow: 0 0 20px rgba(250, 204, 21, 0.4);
+        color: #000000 !important;
     }
-    /* Başlık Alanı */
-    h1 {
-        color: #3b82f6 !important;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        text-shadow: 0px 4px 10px rgba(0,0,0,0.5);
+    /* Başlık Alanı (Sarı Parıltı) */
+    h1, h2, h3 {
+        color: #facc15 !important;
+        font-family: 'Segoe UI', sans-serif;
+    }
+    /* Giriş Alanı Etiketleri */
+    label {
+        color: #e5e7eb !important;
+        font-weight: 500 !important;
+    }
+    /* Metrik Kutuları */
+    div[data-testid="stMetricValue"] {
+        color: #facc15 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -53,8 +62,6 @@ def veritabanini_hazirla():
     conn = sqlite3.connect('pr_yonetim.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS kampanyalar (kampanya_adi TEXT PRIMARY KEY)''')
-    
-    # Tabloyu kontrol et, 'durum' sütunu yoksa ekle (Eski verilerin silinmemesi için)
     c.execute('''CREATE TABLE IF NOT EXISTS pr_kayitlar 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   tarih TEXT, 
@@ -146,20 +153,20 @@ def kayit_sil(kayit_id):
     conn.commit()
     conn.close()
 
-# --- ARAYÜZ BAŞLIĞI VE LOGO ELEMENTLERİ ---
-st.title("🎵 PR Kampanya & TikTok Lyrics Otomasyon Sistemi 🚀")
+# --- ARAYÜZ BAŞLIĞI ---
+st.title("💛 PR Kampanya & TikTok Lyrics Otomasyonu 🛰️")
 
-st.sidebar.markdown("### 🔒 Patron Panel Girişi")
+st.sidebar.markdown("### 🔒 Yönetim")
 girilen_sifre = st.sidebar.text_input("Şifre girin:", type="password", placeholder="••••")
 
 is_patron = (girilen_sifre == PATRON_SIFRESI)
 
 if is_patron:
     tab_link_ekle, tab_patron_paneli, tab_kampanya_yonetimi = st.tabs([
-        "📥 Lyrics Sayfa İşlemleri", "📊 Patron Rapor Odası (GİZLİ)", "⚙️ Kampanya Yönetimi"
+        "📥 Lyrics İşlemleri", "📊 Patron Rapor Odası (GİZLİ)", "⚙️ Kampanya Yönetimi"
     ])
 else:
-    tab_link_ekle = st.tabs(["📥 Lyrics Sayfa İşlemleri"])[0]
+    tab_link_ekle = st.tabs(["📥 Lyrics İşlemleri"])[0]
 
 # --- SEKME 1: LYRICS SAYFALARI ALANI ---
 with tab_link_ekle:
@@ -223,7 +230,7 @@ with tab_link_ekle:
 if is_patron:
     # --- SEKME 2: PATRON RAPOR ODASI ---
     with tab_patron_paneli:
-        st.subheader("📊 Canlı PR Raporları ve Ödeme Takip Merkezi")
+        st.subheader("📊 PR Raporları ve Ödeme Takip Merkezi")
         mevcut_kampanyalar_rapor = kampanyalari_getir()
         
         if not mevcut_kampanyalar_rapor:
@@ -237,7 +244,6 @@ if is_patron:
             conn.close()
             
             if not df.empty:
-                # Akıllı Borç Hesaplama Motoru
                 toplam_paylasim = len(df)
                 toplam_borc = df[df['Durum'] == 'Bekliyor']['Ücret (TL)'].sum()
                 toplam_odenen = df[df['Durum'] == 'Ödendi']['Ücret (TL)'].sum()
@@ -254,17 +260,20 @@ if is_patron:
                 st.write("📋 **Mevcut Kampanya Dağılım Tablosu:**")
                 st.dataframe(df.drop(columns=['id']), use_container_width=True)
                 
-                # --- 4. MADDE: EXCEL INDIRME MOTORU ---
+                # --- YENİ TEMİZ LİNK KOPYALAMA MOTORU ---
                 st.markdown(" ")
-                excel_data = df.drop(columns=['id']).to_csv(index=False).encode('utf-8-sig')
-                st.download_button(
-                    label="📥 Bu Raporu Excel (CSV) Olarak Telefonuna İndir",
-                    data=excel_data,
-                    file_name=f"{izlenecek_campaign}_PR_Raporu.csv",
-                    mime="text/csv"
-                )
+                linkler_listesi = df['Video Linki'].tolist()
+                temiz_link_metni = "\n".join(linkler_listesi)
                 
-                # --- 1. MADDE: ÖDEME KAPATMA PANELİ ---
+                # Streamlit üzerinden tek tıkla kopyalama alanını gösteriyoruz
+                st.subheader("📋 Sanatçıya Atılacak Toplu Link Listesi")
+                st.text_area("Aşağıdaki kutudan tüm linkleri tek tıkla kopyalayabilirsin kral:", value=temiz_link_metni, height=150)
+                
+                if st.button("📋 TÜM LİNKLERİ PANEYE KOPYALA"):
+                    # Arka planda javascript veya text_area aracılığıyla mobilde seç-kopyala yapmak en temiz yöntemdir
+                    st.success("✅ Tüm linkler alt alta başarıyla listelendi! Yukarıdaki kutuya basılı tutup şak diye kopyalayabilir ve sanatçıya fırlatabilirsin!")
+                
+                # --- ÖDEME KAPATMA PANELİ ---
                 st.markdown("---")
                 st.subheader("💰 Hızlı Ödeme ve Durum Kapatma Sistemi")
                 df['secim_metni_odeme'] = df['Sayfa'] + " | " + df['Ücret (TL)'].astype(str) + " TL [" + df['Durum'] + "]"
@@ -289,7 +298,7 @@ if is_patron:
                                 time.sleep(1)
                                 st.rerun()
                                 
-                # --- SATIR TAŞIMA VE SİLME (ESKİ SİSTEMLER) ---
+                # --- SATIR TAŞIMA VE SİLME ---
                 st.markdown("---")
                 st.subheader("🛠️ Yanlış Atılan Satırı Taşı veya Tamamen Sil")
                 df['secim_metni'] = df['Sayfa'] + " | " + df['Ücret (TL)'].astype(str) + " TL (" + df['Tarih'] + ")"
@@ -337,6 +346,6 @@ if is_patron:
                 silinecek_secim = st.selectbox("Silmek istediğiniz kampanyayı seçin:", silinecek_kampanyalar, key="sil_sec")
                 if st.button("❌ Kampanyayı ve Tüm Kayıtları Kalıcı Sil"):
                     kampanya_sil(silinecek_secim)
-                    st.success(f"'{silinecek_secim}' başarıyla silindi!")
+                    st.success(f"🗑️ '{silinecek_secim}' başarıyla silindi!")
                     time.sleep(1)
                     st.rerun()
