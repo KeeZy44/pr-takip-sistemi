@@ -248,7 +248,63 @@ with tab_link_ekle:
 if is_patron:
     # --- SEKME 2: PATRON RAPOR ODASI ---
     with tab_patron_paneli:
-        st.subheader("📊 PR Raporları ve Ödeme Takip Merkezi")
+        
+        # ==========================================
+        # 🔥 YENİ MEKATRONİK GENEL BİLANÇO MOTORU 🔥
+        # ==========================================
+        st.subheader("👑 Şirket Genel PR Bilançosu (Tüm İşlerin Toplamı)")
+        
+        conn = sqlite3.connect('pr_yonetim.db')
+        df_genel = pd.read_sql_query("SELECT kampanya_adi, ucret, durum FROM pr_kayitlar", conn)
+        conn.close()
+        
+        if not df_genel.empty:
+            genel_paylasim = len(df_genel)
+            genel_borc = df_genel[df_genel['durum'] == 'Bekliyor']['ucret'].sum()
+            genel_odenen = df_genel[df_genel['durum'] == 'Ödendi']['ucret'].sum()
+            
+            # Üst Metrik Kutuları
+            g1, g2, g3 = st.columns(3)
+            with g1:
+                st.metric(label="🎥 SİSTEMDEKİ TOPLAM PAYLAŞIM", value=f"{genel_paylasim} Video")
+            with g2:
+                st.metric(label="🚨 PATRONA ATILACAK TOPLAM BORÇ", value=f"{genel_borc:,.2f} TL")
+            with g3:
+                st.metric(label="✅ KAPATILAN TOPLAM ÖDEME", value=f"{genel_odenen:,.2f} TL")
+            
+            # Kampanya bazlı hızlı özet tablosu (Patrona atmak için)
+            st.markdown("📊 **Kampanya Bazlı Borç Dağılım Raporu:**")
+            
+            ozet_liste = []
+            conn = sqlite3.connect('pr_yonetim.db')
+            c = conn.cursor()
+            c.execute("SELECT kampanya_adi FROM kampanyalar")
+            tum_kamplar = [r[0] for r in c.fetchall()]
+            conn.close()
+            
+            for k in tum_kamplar:
+                k_df = df_genel[df_genel['kampanya_adi'] == k]
+                k_borc = k_df[k_df['durum'] == 'Bekliyor']['ucret'].sum()
+                k_odenen = k_df[k_df['durum'] == 'Ödendi']['ucret'].sum()
+                k_video = len(k_df)
+                ozet_liste.append({
+                    "Kampanya / Sanatçı Adı": k,
+                    "Toplam Video": k_video,
+                    "Kalan Borç (TL)": k_borc,
+                    "Ödenen Miktar (TL)": k_odenen
+                })
+            
+            ozet_df = pd.DataFrame(ozet_liste)
+            st.dataframe(ozet_df, use_container_width=True)
+        else:
+            st.info("Sistemde henüz hiçbir finansal kayıt yok.")
+            
+        st.markdown("---")
+        
+        # ==========================================
+        # 🎯 TEKİL KAMPANYA DETAY DETAY RAPOR ALANI 🎯
+        # ==========================================
+        st.subheader("🔍 Şarkı Bazlı Detaylı Rapor ve İşlemler")
         mevcut_kampanyalar_rapor = kampanyalari_getir()
         
         if not mevcut_kampanyalar_rapor:
@@ -268,11 +324,11 @@ if is_patron:
                 
                 c1, c2, c3 = st.columns(3)
                 with c1:
-                    st.metric(label="🎥 Toplam Paylaşım", value=f"{toplam_paylasim} Video")
+                    st.metric(label="🎥 Bu Şarkı Toplam Paylaşım", value=f"{toplam_paylasim} Video")
                 with c2:
-                    st.metric(label="🔴 Kalan Toplam Borç", value=f"{toplam_borc:,.2f} TL")
+                    st.metric(label="🔴 Bu Şarkı Kalan Borç", value=f"{toplam_borc:,.2f} TL")
                 with c3:
-                    st.metric(label="🟢 Ödenen Toplam Miktar", value=f"{toplam_odenen:,.2f} TL")
+                    st.metric(label="🟢 Bu Şarkı Ödenen Miktar", value=f"{toplam_odenen:,.2f} TL")
                 
                 st.markdown("---")
                 st.write("📋 **Mevcut Kampanya Dağılım Tablosu:**")
