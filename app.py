@@ -95,7 +95,7 @@ def veritabanini_hazirla():
     if 'durum' not in sutunlar:
         c.execute("ALTER TABLE pr_kayitlar ADD COLUMN durum TEXT DEFAULT 'Bekliyor'")
         
-    # Kampanyalar tablosuna 'aktiflik' sütunu kontrolü (Eski verileri korumak için)
+    # Kampanyalar tablosuna 'aktiflik' sütunu kontrolü
     c.execute("PRAGMA table_info(kampanyalar)")
     k_sutunlar = [row[1] for row in c.fetchall()]
     if 'aktiflik' not in k_sutunlar:
@@ -229,7 +229,6 @@ else:
 # --- SEKME 1: LYRICS SAYFALARI ALANI ---
 with tab_link_ekle:
     st.error("🚨 DİKKAT: Lütfen formu doldurmadan önce en üstteki kutudan DOĞRU SANATÇI / ŞARKIYI seçtiğinizden emin olun!")
-    # SADECE AKTİF OLAN KAMPANYALARI GETİRİYORUZ (DONDURULANLAR GİZLENİR)
     mevcut_kampanyalar_aktif = kampanyalari_getir(sadece_aktif=True)
     mevcut_kampanyalar_hepsi = kampanyalari_getir(sadece_aktif=False)
     
@@ -266,7 +265,6 @@ with tab_link_ekle:
             st.subheader("✏️ Yanlış Girilen Linki Düzenle")
             st.info("Daha önce gönderdiğiniz hatalı bir linki buradan anında güncelleyebilirsiniz.")
             
-            # Güncelleme alanında her ihtimale karşı tüm kampanyalar açık kalır ki dondurulanı da düzeltebilsinler.
             g_kampanya = st.selectbox("Hangi Şarkının Linkini Düzelteceksiniz?", mevcut_kampanyalar_hepsi, key="g_kamp_sec")
             g_sayfa = st.text_input("Sisteme Girdiğiniz Sayfa Adınız:", placeholder="@lyrics_sayfam", key="g_sayfa_ad")
             
@@ -472,22 +470,23 @@ if is_patron:
             else:
                 st.info("Bu kampanya için henüz hiçbir sayfa link yüklemedi.")
 
-    # --- SEKME 3: KAMPANYA YÖNETİMİ ---
-    with tab_campaign_yonetimi:
+# --- KAMPANYA YÖNETİMİ ---
+if is_patron:
+    with tab_kampanya_yonetimi:
         col_ekle, col_durum_degis = st.columns(2)
         with col_ekle:
             st.subheader("➕ Yeni Kampanya Başlat")
             yeni_sarki = st.text_input("Şarkıcı ve Kampanya Adı:")
             if st.button("🚀 Kampanyayı Aç"):
                 if yeni_sarki:
-                    kampanya_ekle(yeni_sarki)
+                    campaign_ekle(yeni_sarki)
                     st.success(f"'{yeni_sarki}' başarıyla açıldı ve aktif edildi!")
                     time.sleep(1)
                     st.rerun()
                     
         with col_durum_degis:
             st.subheader("🔒 Girişleri Kapat / Dondur")
-            st.info("Biten ama silmeyeceğiniz kampanyaları buradan dondurarak yeni link girişlerini engelleyin.")
+            st.info("Biten ama silmeyeceğiniz kampanyaları dondurarak yeni link girişlerini engelleyin.")
             
             detayli_liste = kampanya_detayli_getir()
             if not detayli_liste:
@@ -505,18 +504,18 @@ if is_patron:
                         if mevcut_aktiflik == 1:
                             if st.button("🛑 Yeni Girişlere Kapat (Dondur)"):
                                 kampanya_aktiflik_set(gercek_kamp_ismi, 0)
-                                st.success(f"🔒 '{gercek_kamp_ismi}' donduruldu! Artık sayfalar bu şarkıyı formda göremez.")
+                                st.success(f"🔒 '{gercek_kamp_ismi}' donduruldu!")
                                 time.sleep(1.5)
                                 st.rerun()
                         else:
                             if st.button("🔓 Tekrar Girişlere Aç (Aktif Et)"):
                                 kampanya_aktiflik_set(gercek_kamp_ismi, 1)
-                                st.success(f"🔓 '{gercek_kamp_ismi}' tekrar açıldı! Sayfalar link gönderebilir.")
+                                st.success(f"🔓 '{gercek_kamp_ismi}' tekrar açıldı!")
                                 time.sleep(1.5)
                                 st.rerun()
                     with c_b2:
                         if st.button("❌ Kampanyayı ve Tüm Kayıtları Kalıcı Sil"):
                             kampanya_sil(gercek_kamp_ismi)
-                            st.success(f"🗑️ '{gercek_kamp_ismi}' ve ait tüm veriler yok edildi!")
+                            st.success(f"🗑️ '{gercek_kamp_ismi}' yok edildi!")
                             time.sleep(1.5)
                             st.rerun()
