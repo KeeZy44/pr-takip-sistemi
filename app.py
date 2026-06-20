@@ -89,10 +89,17 @@ def veritabanini_hazirla():
                   video_linki TEXT, 
                   ucret REAL)''')
     
+    # Durum sütunu kontrolü
     c.execute("PRAGMA table_info(pr_kayitlar)")
     sutunlar = [row[1] for row in c.fetchall()]
     if 'durum' not in sutunlar:
         c.execute("ALTER TABLE pr_kayitlar ADD COLUMN durum TEXT DEFAULT 'Bekliyor'")
+        
+    # Kampanyalar tablosuna 'aktiflik' sütunu kontrolü (Eski verileri korumak için)
+    c.execute("PRAGMA table_info(kampanyalar)")
+    k_sutunlar = [row[1] for row in c.fetchall()]
+    if 'aktiflik' not in k_sutunlar:
+        c.execute("ALTER TABLE kampanyalar ADD COLUMN aktiflik INTEGER DEFAULT 1")
         
     conn.commit()
     conn.close()
@@ -103,10 +110,17 @@ def kampanya_ekle(isim):
     conn = sqlite3.connect('pr_yonetim.db')
     c = conn.cursor()
     try:
-        c.execute("INSERT INTO kampanyalar VALUES (?)", (isim.strip(),))
+        c.execute("INSERT INTO kampanyalar (kampanya_adi, aktiflik) VALUES (?, 1)", (isim.strip(),))
         conn.commit()
     except:
         pass
+    conn.close()
+
+def kampanya_aktiflik_set(isim, durum_kodu):
+    conn = sqlite3.connect('pr_yonetim.db')
+    c = conn.cursor()
+    c.execute("UPDATE kampanyalar SET aktiflik = ? WHERE kampanya_adi = ?", (durum_kodu, isim))
+    conn.commit()
     conn.close()
 
 def kampanya_sil(isim):
@@ -117,11 +131,22 @@ def kampanya_sil(isim):
     conn.commit()
     conn.close()
 
-def kampanyalari_getir():
+def kampanyalari_getir(sadece_aktif=False):
     conn = sqlite3.connect('pr_yonetim.db')
     c = conn.cursor()
-    c.execute("SELECT kampanya_adi FROM kampanyalar")
+    if sadece_aktif:
+        c.execute("SELECT kampanya_adi FROM kampanyalar WHERE aktiflik = 1")
+    else:
+        c.execute("SELECT kampanya_adi FROM kampanyalar")
     liste = [row[0] for row in c.fetchall()]
+    conn.close()
+    return liste
+
+def kampanya_detayli_getir():
+    conn = sqlite3.connect('pr_yonetim.db')
+    c = conn.cursor()
+    c.execute("SELECT kampanya_adi, aktiflik FROM kampanyalar")
+    liste = c.fetchall()
     conn.close()
     return liste
 
@@ -204,17 +229,19 @@ else:
 # --- SEKME 1: LYRICS SAYFALARI ALANI ---
 with tab_link_ekle:
     st.error("🚨 DİKKAT: Lütfen formu doldurmadan önce en üstteki kutudan DOĞRU SANATÇI / ŞARKIYI seçtiğinizden emin olun!")
-    mevcut_kampanyalar = kampanyalari_getir()
+    # SADECE AKTİF OLAN KAMPANYALARI GETİRİYORUZ (DONDURULANLAR GİZLENİR)
+    mevcut_kampanyalar_aktif = kampanyalari_getir(sadece_aktif=True)
+    mevcut_kampanyalar_hepsi = kampanyalari_getir(sadece_aktif=False)
     
-    if not mevcut_kampanyalar:
-        st.warning("Henüz aktif bir PR kampanyası bulunmuyor.")
+    if not mevcut_kampanyalar_aktif:
+        st.warning("Henüz aktif ve girişlere açık bir PR kampanyası bulunmuyor.")
     else:
         col_form, col_guncelle = st.columns(2)
         
         with col_form:
             st.subheader("📥 Yeni Video Bildirim Formu")
             with st.form("sayfa_giriş_formu", clear_on_submit=False):
-                secilen_kampanya = st.selectbox("🎯 Reklamını Yaptığınız Şarkıyı Seçin:", mevcut_kampanyalar, key="yeni_kamp_sec")
+                secilen_kampanya = st.selectbox("🎯 Reklamını Yaptığınız Şarkıyı Seçin:", mevcut_kampanyalar_aktif, key="yeni_kamp_sec")
                 sayfa_adi = st.text_input("TikTok Sayfa Adınız:", placeholder="@lyrics_sayfam", key="yeni_sayfa_ad")
                 video_linki = st.text_input("Paylaşılan Video Linki:", placeholder="https://vm.tiktok.com/...", key="yeni_link_ad")
                 calisilan_ucret = st.number_input("Anlaşılan Ücret (TL):", min_value=0.0, step=50.0, value=0.0)
@@ -239,7 +266,8 @@ with tab_link_ekle:
             st.subheader("✏️ Yanlış Girilen Linki Düzenle")
             st.info("Daha önce gönderdiğiniz hatalı bir linki buradan anında güncelleyebilirsiniz.")
             
-            g_kampanya = st.selectbox("Hangi Şarkının Linkini Düzelteceksiniz?", mevcut_kampanyalar, key="g_kamp_sec")
+            # Güncelleme alanında her ihtimale karşı tüm kampanyalar açık kalır ki dondurulanı da düzeltebilsinler.
+            g_kampanya = st.selectbox("Hangi Şarkının Linkini Düzelteceksiniz?", mevcut_kampanyalar_hepsi, key="g_kamp_sec")
             g_sayfa = st.text_input("Sisteme Girdiğiniz Sayfa Adınız:", placeholder="@lyrics_sayfam", key="g_sayfa_ad")
             
             if g_sayfa:
@@ -263,8 +291,6 @@ with tab_link_ekle:
 if is_patron:
     # --- SEKME 2: PATRON RAPOR ODASI ---
     with tab_patron_paneli:
-        
-        # --- ŞİRKET GENEL PR BİLANÇOSU ---
         st.subheader("👑 Şirket Genel PR Bilançosu (Tüm İşlerin Toplamı)")
         
         conn = sqlite3.connect('pr_yonetim.db')
@@ -312,9 +338,7 @@ if is_patron:
             
         st.markdown("---")
         
-        # ==========================================
-        # 🔥 YENİ SAYFA BAZLI TOPLU BORÇ KAPATMA PANELI 🔥
-        # ==========================================
+        # --- SAYFA BAZLI TOPLU BORÇ KAPATMA PANELI ---
         st.subheader("👤 Sayfa Bazlı Toplu Hesap ve Borç Kapatma")
         mevcut_sayfalar = sayfaları_getir()
         
@@ -337,7 +361,6 @@ if is_patron:
                 with s3:
                     st.metric(label="🟢 SAYFAYA ÖDENEN TOPLAM", value=f"{sayfa_toplam_odenen:,.2f} TL")
                 
-                # Sadece Bekleyen Borçların Listesi
                 bekleyen_sayfa_df = sayfa_df[sayfa_df['durum'] == 'Bekliyor'][['tarih', 'kampanya_adi', 'video_linki', 'ucret']]
                 bekleyen_sayfa_df.columns = ['Tarih', 'Şarkı / Kampanya', 'Video Linki', 'Ücret (TL)']
                 
@@ -345,10 +368,9 @@ if is_patron:
                     st.write(f"📋 **{secilen_toplu_sayfa} Sayfasının Bekleyen Borç Listesi:**")
                     st.dataframe(bekleyen_sayfa_df, use_container_width=True)
                     
-                    # TOPLU SİLME/KAPATMA BUTONU
                     if st.button(f"🚀 {secilen_toplu_sayfa} Sayfasının TÜM BORÇLARINI TEK TIKLA KAPAT"):
                         sayfa_tum_borclari_kapat(secilen_toplu_sayfa)
-                        st.success(f"✅ Müthiş! {secilen_toplu_sayfa} sayfasının tüm şarkılardaki borçları başarıyla 'Ödendi' yapıldı ve borç sıfırlandı!")
+                        st.success(f"✅ Müthiş! {secilen_toplu_sayfa} sayfasının tüm borçları sıfırlandı!")
                         time.sleep(1.5)
                         st.rerun()
                 else:
@@ -358,10 +380,10 @@ if is_patron:
         
         # --- ŞARKI BAZLI DETAYLI RAPOR ALANI ---
         st.subheader("🔍 Şarkı Bazlı Detaylı Rapor ve İşlemler")
-        mevcut_kampanyalar_rapor = kampanyalari_getir()
+        mevcut_kampanyalar_rapor = kampanyalari_getir(sadece_aktif=False)
         
         if not mevcut_kampanyalar_rapor:
-            st.info("Gösterilecek aktif bir kampanya yok.")
+            st.info("Gösterilecek bir kampanya yok.")
         else:
             izlenecek_campaign = st.selectbox("Raporunu görmek istediğiniz kampanyayı seçin:", mevcut_kampanyalar_rapor, key="rapor_sec")
             
@@ -396,7 +418,7 @@ if is_patron:
                 st.text_area("Aşağıdaki kutudan tüm linkleri tek tıkla kopyalayabilirsin kral:", value=temiz_link_metni, height=150)
                 
                 if st.button("📋 TÜM LİNKLERİ KOPYALAMAK İÇİN HAZIRLA"):
-                    st.success("✅ Tüm linkler alt alta başarıyla listelendi! Yukarıdaki kutudan kolayca kopyalayabilirsin.")
+                    st.success("✅ Tüm linkler kopyalanmaya hazır!")
                 
                 # --- ÖDEME KAPATMA PANELİ ---
                 st.markdown("---")
@@ -451,26 +473,50 @@ if is_patron:
                 st.info("Bu kampanya için henüz hiçbir sayfa link yüklemedi.")
 
     # --- SEKME 3: KAMPANYA YÖNETİMİ ---
-    with tab_kampanya_yonetimi:
-        col_ekle, col_sil = st.columns(2)
+    with tab_campaign_yonetimi:
+        col_ekle, col_durum_degis = st.columns(2)
         with col_ekle:
             st.subheader("➕ Yeni Kampanya Başlat")
             yeni_sarki = st.text_input("Şarkıcı ve Kampanya Adı:")
             if st.button("🚀 Kampanyayı Aç"):
                 if yeni_sarki:
                     kampanya_ekle(yeni_sarki)
-                    st.success(f"'{yeni_sarki}' başarıyla açıldı!")
+                    st.success(f"'{yeni_sarki}' başarıyla açıldı ve aktif edildi!")
                     time.sleep(1)
                     st.rerun()
-        with col_sil:
-            st.subheader("🗑️ Biten Kampanyayı Sil")
-            silinecek_kampanyalar = kampanyalari_getir()
-            if not silinecek_kampanyalar:
-                st.info("Silinecek kampanya yok.")
+                    
+        with col_durum_degis:
+            st.subheader("🔒 Girişleri Kapat / Dondur")
+            st.info("Biten ama silmeyeceğiniz kampanyaları buradan dondurarak yeni link girişlerini engelleyin.")
+            
+            detayli_liste = kampanya_detayli_getir()
+            if not detayli_liste:
+                st.info("Sistemde kampanya yok.")
             else:
-                silinecek_secim = st.selectbox("Silmek istediğiniz kampanyayı seçin:", silinecek_kampanyalar, key="sil_sec")
-                if st.button("❌ Kampanyayı ve Tüm Kayıtları Kalıcı Sil"):
-                    kampanya_sil(silinecek_secim)
-                    st.success(f"🗑️ '{silinecek_secim}' başarıyla silindi!")
-                    time.sleep(1)
-                    st.rerun()
+                formatli_liste = [f"{r[0]} - [{'GİRİŞE AÇIK' if r[1]==1 else 'DONDURULDU'}]" for r in detayli_liste]
+                secilen_islem_kampanyasi = st.selectbox("Durumunu değiştirmek istediğiniz kampanyayı seçin:", formatli_liste, key="durum_islem_sec")
+                
+                if secilen_islem_kampanyasi:
+                    gercek_kamp_ismi = secilen_islem_kampanyasi.split(" - [")[0]
+                    mevcut_aktiflik = [r[1] for r in detayli_liste if r[0] == gercek_kamp_ismi][0]
+                    
+                    c_b1, c_b2 = st.columns(2)
+                    with c_b1:
+                        if mevcut_aktiflik == 1:
+                            if st.button("🛑 Yeni Girişlere Kapat (Dondur)"):
+                                kampanya_aktiflik_set(gercek_kamp_ismi, 0)
+                                st.success(f"🔒 '{gercek_kamp_ismi}' donduruldu! Artık sayfalar bu şarkıyı formda göremez.")
+                                time.sleep(1.5)
+                                st.rerun()
+                        else:
+                            if st.button("🔓 Tekrar Girişlere Aç (Aktif Et)"):
+                                kampanya_aktiflik_set(gercek_kamp_ismi, 1)
+                                st.success(f"🔓 '{gercek_kamp_ismi}' tekrar açıldı! Sayfalar link gönderebilir.")
+                                time.sleep(1.5)
+                                st.rerun()
+                    with c_b2:
+                        if st.button("❌ Kampanyayı ve Tüm Kayıtları Kalıcı Sil"):
+                            kampanya_sil(gercek_kamp_ismi)
+                            st.success(f"🗑️ '{gercek_kamp_ismi}' ve ait tüm veriler yok edildi!")
+                            time.sleep(1.5)
+                            st.rerun()
