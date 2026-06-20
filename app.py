@@ -125,6 +125,14 @@ def kampanyalari_getir():
     conn.close()
     return liste
 
+def sayfaları_getir():
+    conn = sqlite3.connect('pr_yonetim.db')
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT sayfa_adi FROM pr_kayitlar")
+    liste = [row[0] for row in c.fetchall()]
+    conn.close()
+    return liste
+
 def daha_once_gonderdi_mi(campaign, sayfa):
     conn = sqlite3.connect('pr_yonetim.db')
     c = conn.cursor()
@@ -154,6 +162,13 @@ def odeme_durumu_degistir(kayit_id, yeni_durum):
     conn = sqlite3.connect('pr_yonetim.db')
     c = conn.cursor()
     c.execute("UPDATE pr_kayitlar SET durum = ? WHERE id = ?", (yeni_durum, kayit_id))
+    conn.commit()
+    conn.close()
+
+def sayfa_tum_borclari_kapat(sayfa_ismi):
+    conn = sqlite3.connect('pr_yonetim.db')
+    c = conn.cursor()
+    c.execute("UPDATE pr_kayitlar SET durum = 'Ödendi' WHERE sayfa_adi = ? AND durum = 'Bekliyor'", (sayfa_ismi,))
     conn.commit()
     conn.close()
 
@@ -249,13 +264,11 @@ if is_patron:
     # --- SEKME 2: PATRON RAPOR ODASI ---
     with tab_patron_paneli:
         
-        # ==========================================
-        # 🔥 YENİ MEKATRONİK GENEL BİLANÇO MOTORU 🔥
-        # ==========================================
+        # --- ŞİRKET GENEL PR BİLANÇOSU ---
         st.subheader("👑 Şirket Genel PR Bilançosu (Tüm İşlerin Toplamı)")
         
         conn = sqlite3.connect('pr_yonetim.db')
-        df_genel = pd.read_sql_query("SELECT kampanya_adi, ucret, durum FROM pr_kayitlar", conn)
+        df_genel = pd.read_sql_query("SELECT kampanya_adi, sayfa_adi, ucret, durum, tarih, video_linki FROM pr_kayitlar", conn)
         conn.close()
         
         if not df_genel.empty:
@@ -263,7 +276,6 @@ if is_patron:
             genel_borc = df_genel[df_genel['durum'] == 'Bekliyor']['ucret'].sum()
             genel_odenen = df_genel[df_genel['durum'] == 'Ödendi']['ucret'].sum()
             
-            # Üst Metrik Kutuları
             g1, g2, g3 = st.columns(3)
             with g1:
                 st.metric(label="🎥 SİSTEMDEKİ TOPLAM PAYLAŞIM", value=f"{genel_paylasim} Video")
@@ -272,7 +284,6 @@ if is_patron:
             with g3:
                 st.metric(label="✅ KAPATILAN TOPLAM ÖDEME", value=f"{genel_odenen:,.2f} TL")
             
-            # Kampanya bazlı hızlı özet tablosu (Patrona atmak için)
             st.markdown("📊 **Kampanya Bazlı Borç Dağılım Raporu:**")
             
             ozet_liste = []
@@ -302,8 +313,50 @@ if is_patron:
         st.markdown("---")
         
         # ==========================================
-        # 🎯 TEKİL KAMPANYA DETAY DETAY RAPOR ALANI 🎯
+        # 🔥 YENİ SAYFA BAZLI TOPLU BORÇ KAPATMA PANELI 🔥
         # ==========================================
+        st.subheader("👤 Sayfa Bazlı Toplu Hesap ve Borç Kapatma")
+        mevcut_sayfalar = sayfaları_getir()
+        
+        if not mevcut_sayfalar:
+            st.info("Sistemde kayıtlı hiçbir lyrics sayfası bulunamadı.")
+        else:
+            secilen_toplu_sayfa = st.selectbox("Hesabını kapatmak istediğiniz LYRICS SAYFASINI seçin:", mevcut_sayfalar, key="toplu_sayfa_sec")
+            
+            if secilen_toplu_sayfa:
+                sayfa_df = df_genel[df_genel['sayfa_adi'] == secilen_toplu_sayfa]
+                sayfa_toplam_video = len(sayfa_df)
+                sayfa_kalan_borc = sayfa_df[sayfa_df['durum'] == 'Bekliyor']['ucret'].sum()
+                sayfa_toplam_odenen = sayfa_df[sayfa_df['durum'] == 'Ödendi']['ucret'].sum()
+                
+                s1, s2, s3 = st.columns(3)
+                with s1:
+                    st.metric(label=f"🎥 {secilen_toplu_sayfa} Toplam Video", value=f"{sayfa_toplam_video} Adet")
+                with s2:
+                    st.metric(label="🔴 BU SAYFAYA TOPLAM BORÇ", value=f"{sayfa_kalan_borc:,.2f} TL")
+                with s3:
+                    st.metric(label="🟢 SAYFAYA ÖDENEN TOPLAM", value=f"{sayfa_toplam_odenen:,.2f} TL")
+                
+                # Sadece Bekleyen Borçların Listesi
+                bekleyen_sayfa_df = sayfa_df[sayfa_df['durum'] == 'Bekliyor'][['tarih', 'kampanya_adi', 'video_linki', 'ucret']]
+                bekleyen_sayfa_df.columns = ['Tarih', 'Şarkı / Kampanya', 'Video Linki', 'Ücret (TL)']
+                
+                if not bekleyen_sayfa_df.empty:
+                    st.write(f"📋 **{secilen_toplu_sayfa} Sayfasının Bekleyen Borç Listesi:**")
+                    st.dataframe(bekleyen_sayfa_df, use_container_width=True)
+                    
+                    # TOPLU SİLME/KAPATMA BUTONU
+                    if st.button(f"🚀 {secilen_toplu_sayfa} Sayfasının TÜM BORÇLARINI TEK TIKLA KAPAT"):
+                        sayfa_tum_borclari_kapat(secilen_toplu_sayfa)
+                        st.success(f"✅ Müthiş! {secilen_toplu_sayfa} sayfasının tüm şarkılardaki borçları başarıyla 'Ödendi' yapıldı ve borç sıfırlandı!")
+                        time.sleep(1.5)
+                        st.rerun()
+                else:
+                    st.success(f"🎉 Bu sayfanın sistemde bekleyen hiçbir borcu yoktur, hesabı tertemiz!")
+                    
+        st.markdown("---")
+        
+        # --- ŞARKI BAZLI DETAYLI RAPOR ALANI ---
         st.subheader("🔍 Şarkı Bazlı Detaylı Rapor ve İşlemler")
         mevcut_kampanyalar_rapor = kampanyalari_getir()
         
