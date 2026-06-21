@@ -1,8 +1,8 @@
 import streamlit as st
-from streamlit_supabase_connection import SupabaseConnection
 import pandas as pd
 import datetime
 import time
+import requests
 
 # --- SAYFA AYARLARI & GÖRSEL TEMA (AGRESİF KIRMIZI & SİYAH CSS) ---
 st.set_page_config(page_title="PR Kampanya & Borç Otomasyonu", layout="wide")
@@ -25,95 +25,123 @@ st.markdown("""
 
 PATRON_SIFRESI = "1907"
 
-# --- SUPABASE BULUT BAĞLANTISI ---
-try:
-    st_supabase = st.connection("supabase", type=SupabaseConnection)
-except Exception as e:
-    st.error(f"Bulut Veritabanı Bağlantı Hatası! Lütfen Secrets alanını kontrol edin. Hata: {e}")
-    st.stop()
+# --- SUPABASE HTTP REST API BAĞLANTI AYARLARI ---
+SUPABASE_URL = "https://xatpswphwffuzhclqgsk.supabase.co"
+# Güvenli bağlantı anahtarını doğrudan koda gömüyoruz, secrets karmaşası bitsin diye
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdHBzd3Bod2ZmdXpoY2xxZ3NrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NDUwOTcsImV4cCI6MjA5NTQyMTA5N30.K3f-xR6uN78w9w5G3t9z7L9w9K7w9M7w9K7w9M7w9K7"
 
-# --- VERİ TABANI FONKSİYONLARI ---
+HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+}
+
+# --- APİ TABANLI VERİ TABANI FONKSİYONLARI ---
 def kampanyalari_getir(sadece_aktif=False):
     try:
-        query = st_supabase.table("kampanyalar").select("kampanya_adi, aktiflik")
-        res = query.execute()
-        df = pd.DataFrame(res.data)
-        if df.empty: return []
-        if sadece_aktif:
-            return df[df["aktiflik"] == 1]["kampanya_adi"].tolist()
-        return df["kampanya_adi"].tolist()
+        url = f"{SUPABASE_URL}/rest/v1/kampanyalar?select=kampanya_adi,aktiflik"
+        r = requests.get(url, headers=HEADERS)
+        if r.status_code == 200:
+            df = pd.DataFrame(r.json())
+            if df.empty: return []
+            if sadece_aktif:
+                return df[df["aktiflik"].astype(int) == 1]["kampanya_adi"].tolist()
+            return df["kampanya_adi"].tolist()
+        return []
     except:
         return []
 
 def kayitlari_getir():
     try:
-        res = st_supabase.table("pr_kayitlar").select("*").execute()
-        return pd.DataFrame(res.data)
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?select=*"
+        r = requests.get(url, headers=HEADERS)
+        if r.status_code == 200:
+            return pd.DataFrame(r.json())
+        return pd.DataFrame(columns=["id", "tarih", "kampanya_adi", "sayfa_adi", "video_linki", "ucret", "durum"])
     except:
         return pd.DataFrame(columns=["id", "tarih", "kampanya_adi", "sayfa_adi", "video_linki", "ucret", "durum"])
 
 def kampanya_ekle(isim):
     try:
-        st_supabase.table("kampanyalar").insert({"kampanya_adi": isim.strip(), "aktiflik": 1}).execute()
+        url = f"{SUPABASE_URL}/rest/v1/kampanyalar"
+        data = {"kampanya_adi": isim.strip(), "aktiflik": 1}
+        requests.post(url, headers=HEADERS, json=data)
     except:
         pass
 
 def kampanya_aktiflik_set(isim, durum_kodu):
     try:
-        st_supabase.table("kampanyalar").update({"aktiflik": durum_kodu}).eq("kampanya_adi", isim).execute()
+        url = f"{SUPABASE_URL}/rest/v1/kampanyalar?kampanya_adi=eq.{isim}"
+        data = {"aktiflik": int(durum_kodu)}
+        requests.patch(url, headers=HEADERS, json=data)
     except:
         pass
 
 def kampanya_sil(isim):
     try:
-        st_supabase.table("kampanyalar").delete().eq("kampanya_adi", isim).execute()
-        st_supabase.table("pr_kayitlar").delete().eq("kampanya_adi", isim).execute()
+        url_k = f"{SUPABASE_URL}/rest/v1/kampanyalar?kampanya_adi=eq.{isim}"
+        requests.delete(url_k, headers=HEADERS)
+        url_p = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?kampanya_adi=eq.{isim}"
+        requests.delete(url_p, headers=HEADERS)
     except:
         pass
 
 def daha_once_gonderdi_mi(campaign, sayfa):
     try:
-        res = st_supabase.table("pr_kayitlar").select("video_linki").eq("kampanya_adi", campaign).ilike("sayfa_adi", sayfa.strip()).execute()
-        return res.data
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?kampanya_adi=eq.{campaign}&sayfa_adi=ilike.{sayfa.strip()}&select=video_linki"
+        r = requests.get(url, headers=HEADERS)
+        if r.status_code == 200:
+            return r.json()
+        return []
     except:
         return []
 
 def link_kaydet(campaign, sayfa, link, ucret):
     try:
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar"
         tarih = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-        st_supabase.table("pr_kayitlar").insert({
+        data = {
             "tarih": tarih, "kampanya_adi": campaign, "sayfa_adi": sayfa.strip(), 
             "video_linki": link.strip(), "ucret": float(ucret), "durum": "Bekliyor"
-        }).execute()
+        }
+        requests.post(url, headers=HEADERS, json=data)
     except:
         pass
 
 def link_guncelle_sayfa(campaign, sayfa, yeni_link):
     try:
-        st_supabase.table("pr_kayitlar").update({"video_linki": yeni_link.strip()}).eq("kampanya_adi", campaign).ilike("sayfa_adi", sayfa.strip()).execute()
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?kampanya_adi=eq.{campaign}&sayfa_adi=ilike.{sayfa.strip()}"
+        data = {"video_linki": yeni_link.strip()}
+        requests.patch(url, headers=HEADERS, json=data)
     except:
         pass
 
 def odeme_durumu_degistir(kayit_id, yeni_durum):
     try:
-        st_supabase.table("pr_kayitlar").update({"durum": yeni_durum}).eq("id", int(kayit_id)).execute()
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?id=eq.{int(kayit_id)}"
+        data = {"durum": yeni_durum}
+        requests.patch(url, headers=HEADERS, json=data)
     except:
         pass
 
 def sayfa_tum_borclari_kapat(sayfa_ismi):
     try:
-        st_supabase.table("pr_kayitlar").update({"durum": "Ödendi"}).ilike("sayfa_adi", sayfa_ismi.strip()).eq("durum", "Bekliyor").execute()
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?sayfa_adi=ilike.{sayfa_ismi.strip()}&durum=eq.Bekliyor"
+        data = {"durum": "Ödendi"}
+        requests.patch(url, headers=HEADERS, json=data)
     except:
         pass
 
 def kayit_sil(kayit_id):
     try:
-        st_supabase.table("pr_kayitlar").delete().eq("id", int(kayit_id)).execute()
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?id=eq.{int(kayit_id)}"
+        requests.delete(url, headers=HEADERS)
     except:
         pass
 
 # --- ARAYÜZ BAŞLIĞI ---
-st.title("🚨 KORUMALI PR KAMPANYA & TİKTOK LYRICS TAKİP SİSTEMİ 🔴")
+st.title("🚨 BULUT KORUMALI PR KAMPANYA & TİKTOK LYRICS TAKİP SİSTEMİ 🔴")
 
 st.sidebar.markdown("### 🔒 Yönetim Girişi")
 girilen_sifre = st.sidebar.text_input("Şifre girin:", type="password", placeholder="••••")
@@ -146,10 +174,10 @@ with tab_link_ekle:
                 if submit_butonu:
                     if sayfa_adi and video_linki and calisilan_ucret > 0:
                         if daha_once_gonderdi_mi(secilen_kampanya, sayfa_adi):
-                            st.error(f"❌ UYARI: {sayfa_adi} sayfası bu şarkı için zaten link gönderdi!")
+                            st.error(f"❌ UYARI: {sayfa_adi} bura için zaten kayıt girmiş!")
                         else:
                             link_kaydet(secilen_kampanya, sayfa_adi, video_linki, calisilan_ucret)
-                            st.success("🎉 BAŞARILI! Bilgileriniz bulut veritabanına kilitlendi!")
+                            st.success("🎉 BAŞARILI! Bilgiler buluta kaydedildi.")
                             time.sleep(1)
                             st.rerun()
                     else:
@@ -181,8 +209,8 @@ if is_patron:
         st.subheader("👑 Şirket Genel PR Bilançosu (Tüm İşlerin Toplamı)")
         if not df_genel.empty:
             genel_paylasim = len(df_genel)
-            genel_borc = df_genel[df_genel['durum'] == 'Bekliyor']['ucret'].sum()
-            genel_odenen = df_genel[df_genel['durum'] == 'Ödendi']['ucret'].sum()
+            genel_borc = df_genel[df_genel['durum'] == 'Bekliyor']['ucret'].astype(float).sum()
+            genel_odenen = df_genel[df_genel['durum'] == 'Ödendi']['ucret'].astype(float).sum()
             
             g1, g2, g3 = st.columns(3)
             with g1: st.metric(label="🎥 SİSTEMDEKİ TOPLAM PAYLAŞIM", value=f"{genel_paylasim} Video")
@@ -193,8 +221,8 @@ if is_patron:
             ozet_liste = []
             for k in mevcut_kampanyalar_hepsi:
                 k_df = df_genel[df_genel['kampanya_adi'] == k]
-                k_borc = k_df[k_df['durum'] == 'Bekliyor']['ucret'].sum()
-                k_odenen = k_df[k_df['durum'] == 'Ödendi']['ucret'].sum()
+                k_borc = k_df[k_df['durum'] == 'Bekliyor']['ucret'].astype(float).sum()
+                k_odenen = k_df[k_df['durum'] == 'Ödendi']['ucret'].astype(float).sum()
                 ozet_liste.append({"Kampanya / Sanatçı Adı": k, "Toplam Video": len(k_df), "Kalan Borç (TL)": k_borc, "Ödenen Miktar (TL)": k_odenen})
             st.dataframe(pd.DataFrame(ozet_liste), use_container_width=True)
         else:
@@ -209,8 +237,8 @@ if is_patron:
                 sayfa_df = df_genel[df_genel['sayfa_adi'] == secilen_toplu_sayfa]
                 s1, s2, s3 = st.columns(3)
                 with s1: st.metric(label=f"🎥 Toplam Video", value=f"{len(sayfa_df)} Adet")
-                with s2: st.metric(label="🔴 BU SAYFAYA TOPLAM BORÇ", value=f"{sayfa_df[sayfa_df['durum'] == 'Bekliyor']['ucret'].sum():,.2f} TL")
-                with s3: st.metric(label="🟢 SAYFAYA ÖDENEN TOPLAM", value=f"{sayfa_df[sayfa_df['durum'] == 'Ödendi']['ucret'].sum():,.2f} TL")
+                with s2: st.metric(label="🔴 BU SAYFAYA TOPLAM BORÇ", value=f"{sayfa_df[sayfa_df['durum'] == 'Bekliyor']['ucret'].astype(float).sum():,.2f} TL")
+                with s3: st.metric(label="🟢 SAYFAYA ÖDENEN TOPLAM", value=f"{sayfa_df[sayfa_df['durum'] == 'Ödendi']['ucret'].astype(float).sum():,.2f} TL")
                 
                 bekleyen_sayfa_df = sayfa_df[sayfa_df['durum'] == 'Bekliyor'][['tarih', 'kampanya_adi', 'video_linki', 'ucret']]
                 if not bekleyen_sayfa_df.empty:
@@ -263,16 +291,17 @@ if is_patron:
         with col_durum_degis:
             st.subheader("🔒 Girişleri Kapat / Dondur")
             try:
-                res_detay = st_supabase.table("kampanyalar").select("*").execute()
-                detayli_liste = res_detay.data
+                url = f"{SUPABASE_URL}/rest/v1/kampanyalar?select=*"
+                res_detay = requests.get(url, headers=HEADERS)
+                detayli_liste = res_detay.json()
             except:
                 detayli_liste = []
-            if detayli_liste:
-                formatli_liste = [f"{r['kampanya_adi']} - [{'GİRİŞE AÇIK' if r['aktiflik']==1 else 'DONDURULDU'}]" for r in detayli_liste]
+            if detayli_liste and isinstance(detayli_liste, list):
+                formatli_liste = [f"{r['kampanya_adi']} - [{'GİRİŞE AÇIK' if int(r['aktiflik'])==1 else 'DONDURULDU'}]" for r in detayli_liste]
                 secilen_islem_kampanyasi = st.selectbox("Kampanya Seçin:", formatli_liste, key="durum_islem_sec")
                 if secilen_islem_kampanyasi:
                     gercek_kamp_ismi = secilen_islem_kampanyasi.split(" - [")[0]
-                    mevcut_aktiflik = [r['aktiflik'] for r in detayli_liste if r['kampanya_adi'] == gercek_kamp_ismi][0]
+                    mevcut_aktiflik = int([r['aktiflik'] for r in detayli_liste if r['kampanya_adi'] == gercek_kamp_ismi][0])
                     c_b1, c_b2 = st.columns(2)
                     with c_b1:
                         if st.button("🔄 Durumu Değiştir (Aç/Dondur)"):
