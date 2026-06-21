@@ -318,7 +318,7 @@ if is_patron:
             conn.close()
             
             for k in tum_kamplar:
-                k_df = df_genel[df_genel['kampanya_adi'] == k]
+                k_df = df_genel[df_genel['campaign_adi' if 'campaign_adi' in df_genel.columns else 'kampanya_adi'] == k]
                 k_borc = k_df[k_df['durum'] == 'Bekliyor']['ucret'].sum()
                 k_odenen = k_df[k_df['durum'] == 'Ödendi']['ucret'].sum()
                 k_video = len(k_df)
@@ -479,7 +479,7 @@ if is_patron:
             yeni_sarki = st.text_input("Şarkıcı ve Kampanya Adı:")
             if st.button("🚀 Kampanyayı Aç"):
                 if yeni_sarki:
-                    campaign_ekle(yeni_sarki)
+                    kampanya_ekle(yeni_sarki)
                     st.success(f"'{yeni_sarki}' başarıyla açıldı ve aktif edildi!")
                     time.sleep(1)
                     st.rerun()
