@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import time
-from supabase import create_client, Client
+import requests
 
 # --- SAYFA AYARLARI & GÖRSEL TEMA (AGRESİF KIRMIZI & SİYAH CSS) ---
 st.set_page_config(page_title="PR Kampanya & Borç Otomasyonu", layout="wide")
@@ -25,92 +25,117 @@ st.markdown("""
 
 PATRON_SIFRESI = "1907"
 
-# --- SUPABASE RESMİ BAĞLANTI AYARLARI ---
-SUPABASE_URL = "https://xatpswphwffuzhclqgsk.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdHBzd3Bod2ZmdXpoY2xxZ3NrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NDUwOTcsImV4cCI6MjA5NTQyMTA5N30.K3f-xR6uN78w9w5G3t9z7L9w9K7w9M7w9K7w9M7w9K7"
+# --- SUPABASE HTTP REST API BAĞLANTI AYARLARI ---
+SUPABASE_URL = "https://lensqmqygwkhaugogvws.supabase.co"
+SUPABASE_KEY = "sb_publishable_d5Ak2igKELmkIG43PGdAQw_CtyKoIRW"
 
-@st.cache_resource
-def get_supabase_client():
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+}
 
-supabase: Client = get_supabase_client()
-
-# --- VERİ TABANI FONKSİYONLARI ---
+# --- APİ TABANLI VERİ TABANI FONKSİYONLARI ---
 def kampanyalari_getir(sadece_aktif=False):
     try:
-        res = supabase.table("kampanyalar").select("kampanya_adi, aktiflik").execute()
-        df = pd.DataFrame(res.data)
-        if df.empty: return []
-        if sadece_aktif:
-            return df[df["aktiflik"].astype(int) == 1]["kampanya_adi"].tolist()
-        return df["kampanya_adi"].tolist()
+        url = f"{SUPABASE_URL}/rest/v1/kampanyalar?select=kampanya_adi,aktiflik"
+        r = requests.get(url, headers=HEADERS)
+        if r.status_code == 200:
+            df = pd.DataFrame(r.json())
+            if df.empty: return []
+            if sadece_aktif:
+                return df[df["aktiflik"].astype(int) == 1]["kampanya_adi"].tolist()
+            return df["kampanya_adi"].tolist()
+        return []
     except:
         return []
 
 def kayitlari_getir():
     try:
-        res = supabase.table("pr_kayitlar").select("*").execute()
-        return pd.DataFrame(res.data)
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?select=*"
+        r = requests.get(url, headers=HEADERS)
+        if r.status_code == 200:
+            return pd.DataFrame(r.json())
+        return pd.DataFrame(columns=["id", "tarih", "kampanya_adi", "sayfa_adi", "video_linki", "ucret", "durum"])
     except:
         return pd.DataFrame(columns=["id", "tarih", "kampanya_adi", "sayfa_adi", "video_linki", "ucret", "durum"])
 
 def kampanya_ekle(isim):
     try:
-        supabase.table("kampanyalar").insert({"kampanya_adi": isim.strip(), "aktiflik": 1}).execute()
+        url = f"{SUPABASE_URL}/rest/v1/kampanyalar"
+        data = {"kampanya_adi": isim.strip(), "aktiflik": 1}
+        requests.post(url, headers=HEADERS, json=data)
     except:
         pass
 
 def kampanya_aktiflik_set(isim, durum_kodu):
     try:
-        supabase.table("kampanyalar").update({"aktiflik": int(durum_kodu)}).eq("kampanya_adi", isim).execute()
+        url = f"{SUPABASE_URL}/rest/v1/kampanyalar?kampanya_adi=eq.{isim}"
+        data = {"aktiflik": int(durum_kodu)}
+        requests.patch(url, headers=HEADERS, json=data)
     except:
         pass
 
 def kampanya_sil(isim):
     try:
-        supabase.table("kampanyalar").delete().eq("kampanya_adi", isim).execute()
-        supabase.table("pr_kayitlar").delete().eq("kampanya_adi", isim).execute()
+        url_k = f"{SUPABASE_URL}/rest/v1/kampanyalar?kampanya_adi=eq.{isim}"
+        requests.delete(url_k, headers=HEADERS)
+        url_p = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?kampanya_adi=eq.{isim}"
+        requests.delete(url_p, headers=HEADERS)
     except:
         pass
 
 def daha_once_gonderdi_mi(campaign, sayfa):
     try:
-        res = supabase.table("pr_kayitlar").select("video_linki").eq("kampanya_adi", campaign).ilike("sayfa_adi", sayfa.strip()).execute()
-        return res.data
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?kampanya_adi=eq.{campaign}&sayfa_adi=ilike.{sayfa.strip()}&select=video_linki"
+        r = requests.get(url, headers=HEADERS)
+        if r.status_code == 200:
+            return r.json()
+        return []
     except:
         return []
 
 def link_kaydet(campaign, sayfa, link, ucret):
     try:
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar"
         tarih = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-        supabase.table("pr_kayitlar").insert({
+        data = {
             "tarih": tarih, "kampanya_adi": campaign, "sayfa_adi": sayfa.strip(), 
             "video_linki": link.strip(), "ucret": float(ucret), "durum": "Bekliyor"
-        }).execute()
+        }
+        requests.post(url, headers=HEADERS, json=data)
     except:
         pass
 
 def link_guncelle_sayfa(campaign, sayfa, yeni_link):
     try:
-        supabase.table("pr_kayitlar").update({"video_linki": yeni_link.strip()}).eq("kampanya_adi", campaign).ilike("sayfa_adi", sayfa.strip()).execute()
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?kampanya_adi=eq.{campaign}&sayfa_adi=ilike.{sayfa.strip()}"
+        data = {"video_linki": yeni_link.strip()}
+        requests.patch(url, headers=HEADERS, json=data)
     except:
         pass
 
 def odeme_durumu_degistir(kayit_id, yeni_durum):
     try:
-        supabase.table("pr_kayitlar").update({"durum": yeni_durum}).eq("id", int(kayit_id)).execute()
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?id=eq.{int(kayit_id)}"
+        data = {"durum": yeni_durum}
+        requests.patch(url, headers=HEADERS, json=data)
     except:
         pass
 
 def sayfa_tum_borclari_kapat(sayfa_ismi):
     try:
-        supabase.table("pr_kayitlar").update({"durum": "Ödendi"}).ilike("sayfa_adi", sayfa_ismi.strip()).eq("durum", "Bekliyor").execute()
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?sayfa_adi=ilike.{sayfa_ismi.strip()}&durum=eq.Bekliyor"
+        data = {"durum": "Ödendi"}
+        requests.patch(url, headers=HEADERS, json=data)
     except:
         pass
 
 def kayit_sil(kayit_id):
     try:
-        supabase.table("pr_kayitlar").delete().eq("id", int(kayit_id)).execute()
+        url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?id=eq.{int(kayit_id)}"
+        requests.delete(url, headers=HEADERS)
     except:
         pass
 
@@ -265,8 +290,9 @@ if is_patron:
         with col_durum_degis:
             st.subheader("🔒 Girişleri Kapat / Dondur")
             try:
-                res_detay = supabase.table("kampanyalar").select("*").execute()
-                detayli_liste = res_detay.data
+                url = f"{SUPABASE_URL}/rest/v1/kampanyalar?select=*"
+                res_detay = requests.get(url, headers=HEADERS)
+                detayli_liste = res_detay.json()
             except:
                 detayli_liste = []
             if detayli_liste and isinstance(detayli_liste, list):
