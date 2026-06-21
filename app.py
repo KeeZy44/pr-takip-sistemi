@@ -42,24 +42,28 @@ def kampanyalari_getir(sadece_aktif=False):
         url = f"{SUPABASE_URL}/rest/v1/kampanyalar?select=kampanya_adi,aktiflik"
         r = requests.get(url, headers=HEADERS)
         if r.status_code == 200:
-            df = pd.DataFrame(r.json())
-            if df.empty: return []
-            if sadece_aktif:
-                return df[df["aktiflik"].astype(int) == 1]["kampanya_adi"].tolist()
-            return df["kampanya_adi"].tolist()
+            data = r.json()
+            if data and len(data) > 0:
+                df = pd.DataFrame(data)
+                if sadece_aktif:
+                    return df[df["aktiflik"].astype(int) == 1]["kampanya_adi"].tolist()
+                return df["kampanya_adi"].tolist()
         return []
     except:
         return []
 
 def kayitlari_getir():
+    cols = ["id", "tarih", "kampanya_adi", "sayfa_adi", "video_linki", "ucret", "durum"]
     try:
         url = f"{SUPABASE_URL}/rest/v1/pr_kayitlar?select=*"
         r = requests.get(url, headers=HEADERS)
         if r.status_code == 200:
-            return pd.DataFrame(r.json())
-        return pd.DataFrame(columns=["id", "tarih", "kampanya_adi", "sayfa_adi", "video_linki", "ucret", "durum"])
+            data = r.json()
+            if data and len(data) > 0:
+                return pd.DataFrame(data)
+        return pd.DataFrame(columns=cols)
     except:
-        return pd.DataFrame(columns=["id", "tarih", "kampanya_adi", "sayfa_adi", "video_linki", "ucret", "durum"])
+        return pd.DataFrame(columns=cols)
 
 def kampanya_ekle(isim):
     try:
@@ -206,7 +210,7 @@ if is_patron:
     
     with tab_patron_paneli:
         st.subheader("👑 Şirket Genel PR Bilançosu (Tüm İşlerin Toplamı)")
-        if not df_genel.empty:
+        if not df_genel.empty and len(df_genel) > 0:
             genel_paylasim = len(df_genel)
             genel_borc = df_genel[df_genel['durum'] == 'Bekliyor']['ucret'].astype(float).sum()
             genel_odenen = df_genel[df_genel['durum'] == 'Ödendi']['ucret'].astype(float).sum()
@@ -224,57 +228,59 @@ if is_patron:
                 k_odenen = k_df[k_df['durum'] == 'Ödendi']['ucret'].astype(float).sum()
                 ozet_liste.append({"Kampanya / Sanatçı Adı": k, "Toplam Video": len(k_df), "Kalan Borç (TL)": k_borc, "Ödenen Miktar (TL)": k_odenen})
             st.dataframe(pd.DataFrame(ozet_liste), use_container_width=True)
-        else:
-            st.info("Sistemde henüz hiçbir finansal kayıt yok.")
             
-        st.markdown("---")
-        st.subheader("👤 Sayfa Bazlı Toplu Hesap ve Borç Kapatma")
-        if not df_genel.empty:
-            mevcut_sayfalar = df_genel["sayfa_adi"].unique().tolist()
-            secilen_toplu_sayfa = st.selectbox("Hesabını kapatmak istediğiniz LYRICS SAYFASINI seçin:", mevcut_sayfalar, key="toplu_sayfa_sec")
-            if secilen_toplu_sayfa:
-                sayfa_df = df_genel[df_genel['sayfa_adi'] == secilen_toplu_sayfa]
-                s1, s2, s3 = st.columns(3)
-                with s1: st.metric(label=f"🎥 Toplam Video", value=f"{len(sayfa_df)} Adet")
-                with s2: st.metric(label="🔴 BU SAYFAYA TOPLAM BORÇ", value=f"{sayfa_df[sayfa_df['durum'] == 'Bekliyor']['ucret'].astype(float).sum():,.2f} TL")
-                with s3: st.metric(label="🟢 SAYFAYA ÖDENEN TOPLAM", value=f"{sayfa_df[sayfa_df['durum'] == 'Ödendi']['ucret'].astype(float).sum():,.2f} TL")
-                
-                bekleyen_sayfa_df = sayfa_df[sayfa_df['durum'] == 'Bekliyor'][['tarih', 'kampanya_adi', 'video_linki', 'ucret']]
-                if not bekleyen_sayfa_df.empty:
-                    st.dataframe(bekleyen_sayfa_df, use_container_width=True)
-                    if st.button(f"🚀 {secilen_toplu_sayfa} Sayfasının TÜM BORÇLARINI TEK TIKLA KAPAT"):
-                        sayfa_tum_borclari_kapat(secilen_toplu_sayfa)
-                        st.success("Tüm borçlar sıfırlandı!")
-                        time.sleep(1)
-                        st.rerun()
+            st.markdown("---")
+            st.subheader("👤 Sayfa Bazlı Toplu Hesap ve Borç Kapatma")
+            mevcut_sayfalar = df_genel["sayfa_adi"].dropna().unique().tolist()
+            if mevcut_sayfalar:
+                secilen_toplu_sayfa = st.selectbox("Hesabını kapatmak istediğiniz LYRICS SAYFASINI seçin:", mevcut_sayfalar, key="toplu_sayfa_sec")
+                if secilen_toplu_sayfa:
+                    sayfa_df = df_genel[df_genel['sayfa_adi'] == secilen_toplu_sayfa]
+                    s1, s2, s3 = st.columns(3)
+                    with s1: st.metric(label=f"🎥 Toplam Video", value=f"{len(sayfa_df)} Adet")
+                    with s2: st.metric(label="🔴 BU SAYFAYA TOPLAM BORÇ", value=f"{sayfa_df[sayfa_df['durum'] == 'Bekliyor']['ucret'].astype(float).sum():,.2f} TL")
+                    with s3: st.metric(label="🟢 SAYFAYA ÖDENEN TOPLAM", value=f"{sayfa_df[sayfa_df['durum'] == 'Ödendi']['ucret'].astype(float).sum():,.2f} TL")
+                    
+                    bekleyen_sayfa_df = sayfa_df[sayfa_df['durum'] == 'Bekliyor'][['tarih', 'kampanya_adi', 'video_linki', 'ucret']]
+                    if not bekleyen_sayfa_df.empty:
+                        st.dataframe(bekleyen_sayfa_df, use_container_width=True)
+                        if st.button(f"🚀 {secilen_toplu_sayfa} Sayfasının TÜM BORÇLARINI TEK TIKLA KAPAT"):
+                            sayfa_tum_borclari_kapat(secilen_toplu_sayfa)
+                            st.success("Tüm borçlar sıfırlandı!")
+                            time.sleep(1)
+                            st.rerun()
                         
-        st.markdown("---")
-        st.subheader("🔍 Şarkı Bazlı Detaylı Rapor ve İşlemler")
-        if mevcut_kampanyalar_hepsi:
-            izlenecek_campaign = st.selectbox("Raporunu görmek istediğiniz kampanyayı seçin:", mevcut_kampanyalar_hepsi, key="rapor_sec")
-            df_sarki = df_genel[df_genel['kampanya_adi'] == izlenecek_campaign]
-            if not df_sarki.empty:
-                st.dataframe(df_sarki[["tarih", "sayfa_adi", "video_linki", "ucret", "durum"]], use_container_width=True)
-                st.text_area("Sanatçı Link Listesi:", value="\n".join(df_sarki['video_linki'].tolist()), height=150)
-                
-                df_sarki['secim_metni_odeme'] = df_sarki['sayfa_adi'] + " | " + df_sarki['ucret'].astype(str) + " TL [" + df_sarki['durum'] + "]"
-                secili_odeme_row = st.selectbox("Ödemesini değiştirmek istediğiniz sayfayı seçin:", df_sarki['secim_metni_odeme'].tolist(), key="odeme_satir_sec")
-                if secili_odeme_row:
-                    secili_id = int(df_sarki[df_sarki['secim_metni_odeme'] == secili_odeme_row]['id'].values[0])
-                    curr_status = df_sarki[df_sarki['id'] == secili_id]['durum'].values[0]
-                    col_b1, col_b2 = st.columns(2)
-                    with col_b1:
-                        if st.button("Durumu Değiştir (Ödendi/Bekliyor)"):
-                            odeme_durumu_degistir(secili_id, 'Ödendi' if curr_status == 'Bekliyor' else 'Bekliyor')
-                            st.success("Durum güncellendi!")
-                            time.sleep(1)
-                            st.rerun()
-                    with col_b2:
-                        if st.button("🗑️ Bu Kaydı Sistemden Tamamen Sil"):
-                            kayit_sil(secili_id)
-                            st.success("Kayıt silindi!")
-                            time.sleep(1)
-                            st.rerun()
+            st.markdown("---")
+            st.subheader("🔍 Şarkı Bazlı Detaylı Rapor ve İşlemler")
+            if mevcut_kampanyalar_hepsi:
+                izlenecek_campaign = st.selectbox("Raporunu görmek istediğiniz kampanyayı seçin:", mevcut_kampanyalar_hepsi, key="rapor_sec")
+                df_sarki = df_genel[df_genel['kampanya_adi'] == izlenecek_campaign]
+                if not df_sarki.empty and len(df_sarki) > 0:
+                    st.dataframe(df_sarki[["tarih", "sayfa_adi", "video_linki", "ucret", "durum"]], use_container_width=True)
+                    st.text_area("Sanatçı Link Listesi:", value="\n".join(df_sarki['video_linki'].tolist()), height=150)
+                    
+                    df_sarki['secim_metni_odeme'] = df_sarki['sayfa_adi'] + " | " + df_sarki['ucret'].astype(str) + " TL [" + df_sarki['durum'] + "]"
+                    secili_odeme_row = st.selectbox("Ödemesini değiştirmek istediğiniz sayfayı seçin:", df_sarki['secim_metni_odeme'].tolist(), key="odeme_satir_sec")
+                    if secili_odeme_row:
+                        secili_id = int(df_sarki[df_sarki['secim_metni_odeme'] == secili_odeme_row]['id'].values[0])
+                        curr_status = df_sarki[df_sarki['id'] == secili_id]['durum'].values[0]
+                        col_b1, col_b2 = st.columns(2)
+                        with col_b1:
+                            if st.button("Durumu Değiştir (Ödendi/Bekliyor)"):
+                                odeme_durumu_degistir(secili_id, 'Ödendi' if curr_status == 'Bekliyor' else 'Bekliyor')
+                                st.success("Durum güncellendi!")
+                                time.sleep(1)
+                                st.rerun()
+                        with col_b2:
+                            if st.button("🗑️ Bu Kaydı Sistemden Tamamen Sil"):
+                                kayit_sil(secili_id)
+                                st.success("Kayıt silindi!")
+                                time.sleep(1)
+                                st.rerun()
+                else:
+                    st.info("Bu kampanya için henüz girilmiş bir link/kayıt bulunmuyor.")
+        else:
+            st.info("Sistemde henüz hiçbir finansal kayıt yok. Kampanya açıldı, link girilmesi bekleniyor.")
 
     with tab_kampanya_yonetimi:
         col_ekle, col_durum_degis = st.columns(2)
@@ -295,7 +301,7 @@ if is_patron:
                 detayli_liste = res_detay.json()
             except:
                 detayli_liste = []
-            if detayli_liste and isinstance(detayli_liste, list):
+            if detayli_liste and isinstance(detayli_liste, list) and len(detayli_liste) > 0:
                 formatli_liste = [f"{r['kampanya_adi']} - [{'GİRİŞE AÇIK' if int(r['aktiflik'])==1 else 'DONDURULDU'}]" for r in detayli_liste]
                 secilen_islem_kampanyasi = st.selectbox("Kampanya Seçin:", formatli_liste, key="durum_islem_sec")
                 if secilen_islem_kampanyasi:
